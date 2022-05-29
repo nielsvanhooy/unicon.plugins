@@ -58,6 +58,12 @@ proceed_confirm_stmt = Statement(pattern=patterns.proceed_confirm,
                                  loop_continue=True,
                                  continue_timer=False)
 
+dest_file_startup = Statement(pattern=patterns.dest_file_startup,
+    action="sendline()",
+    loop_continue=True,
+    continue_timer=False)
+
+
 configure_statement_list = [
     are_you_sure,
     wish_continue,
@@ -68,6 +74,7 @@ configure_statement_list = [
 ]
 
 execute_statement_list = [
+    dest_file_startup,
     overwrite_previous,
     delete_filename,
     confirm,
