@@ -58,6 +58,9 @@ proceed_confirm_stmt = Statement(pattern=patterns.proceed_confirm,
                                  loop_continue=True,
                                  continue_timer=False)
 
+macro_prompt = Statement(pattern=patterns.macro_prompt,
+                         loop_continue=False)
+
 dest_file_startup = Statement(pattern=patterns.dest_file_startup,
     action="sendline()",
     loop_continue=True,
@@ -70,7 +73,8 @@ configure_statement_list = [
     confirm,
     want_continue,
     are_you_sure_ywtdt,
-    proceed_confirm_stmt
+    proceed_confirm_stmt,
+    macro_prompt
 ]
 
 execute_statement_list = [
