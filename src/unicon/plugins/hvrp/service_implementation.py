@@ -7,12 +7,7 @@ Description:
     This subpackage implements services specific to HVRP.
 """
 
-from unicon.plugins.generic.service_implementation import BashService, \
-                                                          Send, Sendline, \
-                                                          Expect, Execute, \
-                                                          Configure ,\
-                                                          Enable, Disable, \
-                                                          LogUser
+from unicon.plugins.generic.service_implementation import Configure
 
 
 class Configure(Configure):

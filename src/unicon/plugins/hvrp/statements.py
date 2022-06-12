@@ -59,7 +59,7 @@ class HvrpStatements(object):
                                        args=None,
                                        loop_continue=True,
                                        continue_timer=False)
-        self.save_config_notice = Statement(pattern=r'(\[y\/n\])',
+        self.save_config_notice = Statement(pattern=r'(\[y\/n\])|(\[Y\/N\])',
                                             action=lambda
                                                 spawn: spawn.sendline('y'),
                                             args=None,

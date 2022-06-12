@@ -25,7 +25,7 @@ class HvrpPatterns(UniconCorePatterns):
         self.enable_prompt = r'^(.*)\<.*\>$'
 
         # [~HOSTNAME] | <HOSTNAME-01> # # breaks on [\y\n] # Warning: All the configuration will be saved to the next startup configuration. Continue? [y/n]:
-        self.config_prompt = r'^\[.*\]'
+        self.config_prompt = r'^\[.*\]$'
 
         # Exit with uncommitted changes? [yes,no] (yes)
         self.commit_changes_prompt = r'Exit with uncommitted changes? [yes,no] (yes)\s*'
