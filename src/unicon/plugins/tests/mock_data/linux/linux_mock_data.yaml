@@ -162,6 +162,8 @@ exec:
         new_state: exec18
     "prompt19":
         new_state: exec19
+    "prompt20":
+        new_state: exec20
     "ls": |
       /tmp
       /var
@@ -368,6 +370,10 @@ exec19:
     prompt: "~ #"
     commands: *cmds
 
+exec20:
+  prompt: "[%N] # "
+  commands: *cmds
+
 
 sma_prompt:
   prompt: "sma03:testuser 1] "
@@ -447,6 +453,8 @@ ios_config:
     "no logging console": ""
     "line console 0":
       new_state: ios_config_line
+    "line vty 0 4":
+      new_state: ios_config_line
     "exit":
       new_state: ios_enable
     "end":
@@ -456,6 +464,7 @@ ios_config_line:
   prompt: "%N(config-line)#"
   commands:
     "exec-timeout 0": ""
+    "line vty 0 4": ""
     "end":
       new_state: ios_enable
 

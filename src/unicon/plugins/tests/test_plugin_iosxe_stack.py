@@ -88,6 +88,20 @@ class TestIosXEStackConnect(unittest.TestCase):
         d.disconnect()
         md.stop()
 
+    def test_stack_connect4(self):
+        md = MockDeviceTcpWrapperIOSXE(hostname='Router', port=0, state='stack_rommon' + ',stack_rommon'*4, stack=True)
+        md.start()
+        d = Connection(hostname='Router',
+                       start = ['telnet 127.0.0.1 ' + str(i) for i in md.ports[:]],
+                       os='iosxe',
+                       chassis_type='stack',
+                       credentials=dict(default=dict(username='cisco', password='cisco')),
+                       )
+        d.connect()
+        self.assertTrue(d.active.alias == 'peer_1')
+        d.disconnect()
+        md.stop()
+
 
 class TestIosXEStackExecute(unittest.TestCase):
 
@@ -268,6 +282,7 @@ class TestIosXEStackReload(unittest.TestCase):
                 d.reload('active_install_add',
                           reply=install_add_one_shot_dialog,
                           error_pattern = error_pattern)
+            self.assertEqual(d.reload.error_pattern, error_pattern)
         finally:
              d.disconnect()
              md.stop()

@@ -210,7 +210,11 @@ class StackReload(BaseService):
         timeout = timeout or self.timeout
         conn = self.connection.active
 
-        self.error_pattern = error_pattern or conn.settings.ERROR_PATTERN
+        if error_pattern is None:
+            self.error_pattern = conn.settings.ERROR_PATTERN
+        else:
+            self.error_pattern = error_pattern
+
         if not isinstance(self.error_pattern, list):
             raise ValueError('error_pattern should be a list')
         if append_error_pattern:
@@ -219,7 +223,7 @@ class StackReload(BaseService):
             self.error_pattern += append_error_pattern
         # update all subconnection context with image_to_boot
         if image_to_boot:
-            for subconn in self.connection:
+            for subconn in self.connection.subconnections:
                 subconn.context.image_to_boot = image_to_boot
         reload_dialog = self.dialog
         if reply:

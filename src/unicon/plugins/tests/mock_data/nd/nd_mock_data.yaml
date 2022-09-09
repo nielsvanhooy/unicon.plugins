@@ -421,6 +421,8 @@ ios_config:
     "no logging console": ""
     "line console 0":
       new_state: ios_config_line
+    "line vty 0 4":
+      new_state: ios_config_line
     "exit":
       new_state: ios_enable
     "end":
@@ -430,6 +432,7 @@ ios_config_line:
   prompt: "%N(config-line)#"
   commands:
     "exec-timeout 0": ""
+    "line vty 0 4": ""
     "end":
       new_state: ios_enable
 
@@ -582,12 +585,7 @@ exec_ps1:
 exec_ps2:
   prompt: "> "
   commands:
-    "echo $x":
-      response: |
-        > 
-        > 
-      timing:
-        - 0:,0.5,0.5
+    "echo $x": ""
     "done":
       new_state: exec
       response: |
