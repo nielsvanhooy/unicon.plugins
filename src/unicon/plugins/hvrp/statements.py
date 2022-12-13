@@ -7,12 +7,13 @@ Description:
      Module for defining all the Statements and callback required for the
     Current implementation
 """
+from unicon.core.errors import UniconAuthenticationError
 from unicon.eal.dialogs import Statement
 from unicon.plugins.hvrp.patterns import HvrpPatterns
 from unicon.plugins.generic.statements import pre_connection_statement_list, \
     login_handler, user_access_verification, \
     password_handler, bad_password_handler, \
-    incorrect_login_handler
+    incorrect_login_handler, get_enable_credential_password
 
 pat = HvrpPatterns()
 
@@ -20,6 +21,15 @@ pat = HvrpPatterns()
 #############################################################
 #  Hvrp statements
 #############################################################
+
+
+def enable_password_handler(spawn, context, session):
+    enable_credential_password = get_enable_credential_password(context=context)
+    if enable_credential_password:
+        spawn.sendline(enable_credential_password)
+    else:
+        spawn.sendline(context['enable_password'])
+
 
 class HvrpStatements(object):
     """
@@ -66,6 +76,11 @@ class HvrpStatements(object):
                                             loop_continue=True,
                                             continue_timer=False)
 
+        self.super_prompt = Statement(pattern=r'^.*[Pp]assword:',
+                                              action=enable_password_handler,
+                                              args=None,
+                                              loop_continue=True,
+                                              continue_timer=False)
 
 #############################################################
 #  Statement lists
@@ -87,4 +102,4 @@ authentication_statement_list = [hvrp_statements.bad_password_stmt,
 connection_statement_list = authentication_statement_list + \
                             pre_connection_statement_list
 
-default_statement_list = [hvrp_statements.save_config_notice]
+default_statement_list = [hvrp_statements.save_config_notice, hvrp_statements.super_prompt]
