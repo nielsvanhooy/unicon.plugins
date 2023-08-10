@@ -599,6 +599,8 @@ class Execute(BaseService):
         self.dialog = Dialog(execution_statement_list)
         self.matched_retries = connection.settings.EXECUTE_MATCHED_RETRIES
         self.matched_retry_sleep = connection.settings.EXECUTE_MATCHED_RETRY_SLEEP
+        self.state_change_matched_retries = connection.settings.EXECUTE_STATE_CHANGE_MATCH_RETRIES
+        self.state_change_matched_retry_sleep = connection.settings.EXECUTE_STATE_CHANGE_MATCH_RETRY_SLEEP
 
     def log_service_call(self):
         pass
@@ -684,16 +686,16 @@ class Execute(BaseService):
                 if allow_state_change:
                     dialog.append(Statement(
                         pattern=state.pattern,
-                        matched_retries=matched_retries,
-                        matched_retry_sleep=matched_retry_sleep
+                        matched_retries=self.state_change_matched_retries,
+                        matched_retry_sleep=self.state_change_matched_retry_sleep
                     ))
                 else:
                     dialog.append(Statement(
                         pattern=state.pattern,
                         action=invalid_state_change_action,
                         args={'err_state': state, 'sm': sm},
-                        matched_retries=matched_retries,
-                        matched_retry_sleep=matched_retry_sleep
+                        matched_retries=self.state_change_matched_retries,
+                        matched_retry_sleep=self.state_change_matched_retry_sleep
                     ))
 
         # store the last used dialog, used by unittest
@@ -793,6 +795,9 @@ class Configure(BaseService):
         reply: Addition Dialogs for interactive config commands.
         timeout : Timeout value in sec, Default Value is 30 sec
         error_pattern: list of regex to detect command errors
+        allow_state_change: If True allow the state change during the
+               configuration otherwise raise state machine error if the state
+               changes during configuration.
         target: Target RP where to execute service, for DualRp only
         lock_retries: retry times if config mode is locked, default is 0
         lock_retry_sleep: sleep between retries, default is 2 sec
@@ -828,6 +833,8 @@ class Configure(BaseService):
         self.bulk_chunk_lines = connection.settings.BULK_CONFIG_CHUNK_LINES
         self.bulk_chunk_sleep = connection.settings.BULK_CONFIG_CHUNK_SLEEP
         self.valid_transition_commands = ['end', 'exit']
+        self.state_change_matched_retries = connection.settings.EXECUTE_STATE_CHANGE_MATCH_RETRIES
+        self.state_change_matched_retry_sleep = connection.settings.EXECUTE_STATE_CHANGE_MATCH_RETRY_SLEEP
         self.__dict__.update(kwargs)
 
         class ConfigUtils(GenericUtils):
@@ -844,26 +851,6 @@ class Configure(BaseService):
 
     def pre_service(self, *args, **kwargs):
         sm = self.get_sm()
-
-        from_state = sm.get_state(sm.current_state)
-        if from_state.name != self.start_state:
-            # Allow state change to enable if user provided 'end' or 'exit' command
-            # Otherwise raise an exception
-            def config_state_change(spawn):
-                last_cmd = spawn.last_sent.strip()
-                if last_cmd not in self.valid_transition_commands:
-                    invalid_state_change_action(
-                        spawn, err_state=from_state, sm=sm)
-                else:
-                    sm.update_cur_state(from_state)
-
-            from_state_stmt = Statement(pattern=from_state.pattern,
-                                        action=config_state_change,
-                                        args=None,
-                                        loop_continue=False)
-
-            self.dialog += Dialog([from_state_stmt])
-
         self.prompt_recovery = kwargs.get('prompt_recovery', False)
 
         # Backward compatibility with old config lock implementation
@@ -883,14 +870,21 @@ class Configure(BaseService):
                      timeout=None,
                      error_pattern=None,
                      append_error_pattern=None,
+                     allow_state_change=None,
                      target=None,
                      bulk=None,
                      bulk_chunk_lines=None,
                      bulk_chunk_sleep=None,
                      *args,
                      **kwargs):
+
+        con = self.connection
+        sm = self.get_sm()
         handle = self.get_handle(target)
         timeout = timeout or self.timeout
+
+        if allow_state_change is None:
+            allow_state_change = con.settings.CONFIGURE_ALLOW_STATE_CHANGE
 
         if error_pattern is None:
             self.error_pattern = \
@@ -908,14 +902,41 @@ class Configure(BaseService):
             if bulk_chunk_lines is None else bulk_chunk_lines
         bulk_chunk_sleep = self.bulk_chunk_sleep \
             if bulk_chunk_sleep is None else bulk_chunk_sleep
+
         if not isinstance(reply, Dialog):
             raise SubCommandFailure('"reply" must be an instance of Dialog')
+
+        def config_state_change(spawn, from_state, sm):
+            last_cmd = spawn.last_sent.strip()
+            if last_cmd not in self.valid_transition_commands:
+                invalid_state_change_action(
+                    spawn, err_state=from_state, sm=sm)
+            else:
+                sm.update_cur_state(from_state)
 
         self.result = ''
         if command:
             flat_cmd = self.utils.flatten_splitlines_command(command)
             dialog = self.dialog + self.service_dialog(handle=handle, service_dialog=reply)
             sp = handle.spawn
+            # Add all known states to detect state changes.
+            for state in sm.states:
+                # The current state is already added by the service_dialog method
+                if state.name != sm.current_state:
+                        if allow_state_change:
+                            dialog.append(Statement(
+                                pattern=state.pattern,
+                                matched_retries=self.state_change_matched_retries,
+                                matched_retry_sleep=self.state_change_matched_retry_sleep
+                            ))
+                        else:
+                            dialog.append(Statement(
+                                pattern=state.pattern,
+                                action=config_state_change,
+                                args={'from_state': state, 'sm': sm},
+                                matched_retries=self.state_change_matched_retries,
+                                matched_retry_sleep=self.state_change_matched_retry_sleep
+                            ))
             if bulk:
                 indicator = handle.settings.BULK_CONFIG_END_INDICATOR
                 cmd_lst = list(chain(flat_cmd, [indicator]))
@@ -950,11 +971,13 @@ class Configure(BaseService):
                     sp.sendline(cmd)
                     self.update_hostname_if_needed([cmd])
                     self.process_dialog_on_handle(handle, dialog, timeout)
+                    # To handle the session
                     if handle.context.get('config_session_locked'):
                         self.connection.log.warning('Config locked, waiting {} seconds'.format(
                             self.connection.settings.CONFIG_LOCK_RETRY_SLEEP))
                         sleep(self.connection.settings.CONFIG_LOCK_RETRY_SLEEP)
                         config_transition(handle.state_machine, handle.spawn, handle.context)
+                        handle.context['config_session_locked'] = False
                         sp.sendline(cmd)
                         self.process_dialog_on_handle(handle, dialog, timeout)
 
@@ -982,9 +1005,10 @@ class Configure(BaseService):
                 prompt_recovery=self.prompt_recovery,
                 context=handle.context
             )
+        except StateMachineError:
+            raise
         except Exception as err:
-            raise SubCommandFailure('Configuration failed', err) \
-                from err
+            raise SubCommandFailure("Command execution failed", err) from err
 
         cmd_result = self.utils.truncate_trailing_prompt(
             handle.state_machine.get_state(handle.state_machine.current_state),
@@ -2168,7 +2192,7 @@ class HAReloadService(BaseService):
         con.log.info("+++ Reload Completed Successfully +++")
         self.result = True
         if return_output:
-            self.result = ReloadResult(self.result, reload_output.match_output.replace(command, '', 1))
+            self.result = ReloadResult(self.result, reload_output)
 
 
 class SwitchoverService(BaseService):
@@ -2491,24 +2515,23 @@ class BashService(BaseService):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.start_state = "enable"
         self.end_state = "enable"
         self.bash_enabled = False
 
     def pre_service(self, *args, **kwargs):
-        """ Common pre_service procedure for all Services """
         self.prompt_recovery = kwargs.get('prompt_recovery', False)
-        if self.connection.is_connected:
-            return
-        elif self.connection.reconnect:
-            self.connection.connect()
-        else:
-            raise ConnectionError("Connection is not established to device")
+        if not self.connection.is_connected:
+            if self.connection.reconnect:
+                self.connection.connect()
+            else:
+                raise ConnectionError("Connection is not established to device")
+
         if 'target' in kwargs:
             handle = self.get_handle(kwargs['target'])
         else:
             handle = self.get_handle()
+
         handle.state_machine.go_to(
             self.start_state,
             handle.spawn,
@@ -2517,30 +2540,33 @@ class BashService(BaseService):
         )
 
     def call_service(self, target=None, **kwargs):
+        enable_bash = kwargs.pop('enable_bash', False)
         handle = self.get_handle(target)
-        self.result = self.__class__.ContextMgr(connection=handle, enable_bash=not self.bash_enabled, **kwargs)
+        self.result = self.__class__.ContextMgr(
+            connection=handle,
+            enable_bash=enable_bash and not self.bash_enabled,
+            end_state=self.end_state,
+            **kwargs)
 
         # if bash wasn't enabled, it is now!
-        if not self.bash_enabled:
+        if enable_bash:
             self.bash_enabled = True
 
     def post_service(self, *args, **kwargs):
-        if 'target' in kwargs:
-            handle = self.get_handle(kwargs['target'])
-        else:
-            handle = self.get_handle()
-        handle.state_machine.go_to(
-            self.start_state,
-            handle.spawn,
-            context=self.connection.context,
-            prompt_recovery=self.prompt_recovery
-        )
+        # context manager will transition to end_state
+        # no need to do anything post service
+        pass
 
     class ContextMgr(object):
-        def __init__(self, connection, enable_bash=False, timeout=None, **kwargs):
+        def __init__(self, connection,
+                enable_bash=False,
+                end_state=None,
+                timeout=None,
+                **kwargs):
             self.conn = connection
             # Specific platforms has its own prompt
             self.enable_bash = enable_bash
+            self.end_state = end_state
             self.timeout = timeout or connection.settings.CONSOLE_TIMEOUT
 
         def __enter__(self):
@@ -2550,7 +2576,7 @@ class BashService(BaseService):
             self.conn.log.debug('--- detaching console ---')
 
             sm = self.conn.state_machine
-            sm.go_to('enable', self.conn.spawn)
+            sm.go_to(self.end_state, self.conn.spawn)
 
             # do not suppress
             return False
@@ -2580,6 +2606,11 @@ class AttachModuleService(BaseService):
             with rtr.attach(1) as m:
                 m.execute('show interface')
                 m.execute(['show interface 1', 'show interface 2'])
+            # if we want to go to module_debug state
+            with rtr.attach(1, debug=True) as m:
+                m.execute('show interface')
+                m.execute(['show interface 1', 'show interface 2'])
+
 
     """
     def __init__(self, *args, **kwargs):
@@ -2599,9 +2630,10 @@ class AttachModuleService(BaseService):
             raise ConnectionError("Connection is not established to device")
         self.context._module_num = module_num
 
-    def call_service(self, module_num, **kwargs):
+    def call_service(self, module_num, debug=False, **kwargs):
         self.result = self.__class__.ContextMgr(self.connection,
                                                 module_num,
+                                                debug,
                                                 context=self.context,
                                                 **kwargs)
 
@@ -2609,6 +2641,7 @@ class AttachModuleService(BaseService):
         def __init__(self,
                      connection,
                      module_num,
+                     debug=False,
                      target='active',
                      context=None,
                      timeout=None):
@@ -2617,6 +2650,7 @@ class AttachModuleService(BaseService):
             self.timeout = timeout
             self.target = target
             self.context = context
+            self.debug = debug
             self.timeout = timeout or connection.settings.CONSOLE_TIMEOUT
             self.context._module_num = module_num
 
@@ -2633,7 +2667,7 @@ class AttachModuleService(BaseService):
                 raise NotImplementedError('Attach module state not implemented')
 
             self.conn.log.debug('+++ attaching module +++')
-            conn.state_machine.go_to('module',
+            conn.state_machine.go_to('module_debug' if self.debug else 'module',
                                      conn.spawn,
                                      context=self.context,
                                      timeout=self.timeout)
@@ -2873,3 +2907,58 @@ class GuestshellService(BaseService):
 
             raise AttributeError('%s object has no attribute %s'
                                  % (self.__class__.__name__, attr))
+
+class ContextMgrBaseService(BaseService):
+    """ Base service to provide a context manager for device states.
+    Example:
+        .. code-block:: python
+        with device.service() as service:
+            service.execute('command')
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.service_name = "context"
+        self.context_state = "enable"
+        self.start_state = "enable"
+        self.end_state = "enable"
+
+    def call_service(self, target=None, **kwargs):
+        self.result = self.__class__.ContextMgr(
+            connection=self.connection,
+            service=self,
+            **kwargs)
+
+    class ContextMgr(object):
+        def __init__(self, connection, service=None, **kwargs):
+            self.conn = connection
+            self.service = service
+
+        def __enter__(self):
+            self.conn.log.debug(f'Entering context for service {self.service.service_name}')
+            sm = self.conn.state_machine
+            sm.go_to(self.service.context_state,
+                     self.conn.spawn,
+                     context=self.conn.context)
+            return self
+
+        def __exit__(self, exc_type, exc_value, exc_tb):
+            self.conn.log.debug(f'Exiting context for service {self.service.service_name}')
+            sm = self.conn.state_machine
+            sm.go_to(self.service.end_state,
+                     self.conn.spawn,
+                     context=self.conn.context)
+
+            # do not suppress
+            return False
+
+        def __getattr__(self, attr):
+            # check for connection methods
+            if hasattr(self.conn, attr):
+                return getattr(self.conn, attr)
+            # to support .parse() and other device methods
+            elif hasattr(self.conn.device, attr):
+                return getattr(self.conn.device, attr)
+            else:
+                raise AttributeError('Device %s and/or connection %s has no attribute %s'
+                                    % (self.conn.device, self.conn, attr))
+

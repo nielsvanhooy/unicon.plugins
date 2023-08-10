@@ -24,7 +24,7 @@ class ReloadPatterns(UniconCorePatterns):
         self.secure_passwd_std = r'^.*Do you want to enforce secure password standard(\?)?\s*\(yes\/no\)(\s*\[[yn]\])?\:\s*'
         self.admin_password = r'^.*(Enter|Confirm) the password for .*admin'
         self.auto_provision = r'Abort( Power On)? Auto Provisioning .*:'
-        self.reload_confirm_ios = r'^.*Proceed( with reload)?\?\s*\[confirm\]'
+        self.reload_confirm_ios = r'^.*Proceed( with( quick)? reload)?\?\s*\[confirm\]'
         self.reload_confirm = r'^.*Reload node\s*\?\s*\[no,yes\]\s?$'
         self.reload_confirm_nxos = r'^(.*)This command will reboot the system.\s*\(y\/n\)\?\s*\[n\]\s?$'
         self.connection_closed = r'^(.*?)Connection.*? closed|disconnect: Broken pipe'
@@ -102,7 +102,7 @@ class PingPatterns():
         self.data_pattern = r'^.*Data pattern \[.+\]\s?: $'
         self.dfbit_header = r'^.*Set DF bit in IP header(\?)? \[.+\]\s?: $'
         self.dscp = r'^.*DSCP .*\[.+\]\s?: $'
-        self.lsrtv = r'^.*Loose, Strict, Record, Timestamp, Verbose\s?\[.+\]\s?: $'
+        self.lsrtv = r'^.*Loose, Strict, Record, Timestamp, Verbose\s?\[(.+)\]\s?: $'
         self.qos = r'^.*Include global QOS option\? \[.+\]\s?: $'
         self.packet = r'^.*Pad packet\? \[.+\]\s?: $'
         # Range internal dialogs
@@ -115,10 +115,11 @@ class PingPatterns():
         self.others = r'^.*\[.+\]\s?: $'
         #  extd_LSRTV patterns
         self.lsrtv_source = r'^.*Source route: $'
-        self.lsrtv_hot_count = r'^.*Number of hops \[.*\]: $'
-        self.lsrtv_timestamp_count = r'^.*Number of timestamps \[.*\]: $}'
-        self.lsrtv_noroom = r'^.*No room for that option$'
-        self.lsrtv_invalid_hop = r'^.*Invalid number of hops$'
+        self.lsrtv_hop_count = r'^.*Number of hops \[.*\]: $'
+        self.lsrtv_timestamp_count = r'^.*Number of timestamps \[.*\]: $'
+        self.lsrtv_noroom = r'^.*No room for that option'
+        self.lsrtv_invalid_hop = r'^.*Invalid number of hops'
+        self.lsrtv_one_allowed = r'^.*% Only one source route option allowed'
         # Invalid commands
         self.invalid_command = r'^.*% *Invalid.*'
 
@@ -152,24 +153,25 @@ class CopyPatterns():
         self.copy_overwrite = r'^.*Do you want to over\s?write\?? (\(y\/n\)\?)?\[.*\].*$'
         self.copy_nx_vrf = r'^.*Enter vrf \(If no input,.*default.*\):\s*$'
         self.copy_proceed = r'^.*bytes.*proceed\?.*$'
-        self.tftp_addr =r'^.*Address.*$'
+        self.tftp_addr =r'^.*Address or name of remote host \[\]\?\s*$'
         self.copy_complete = r'^.*bank [0-9]+'
         self.copy_error_message = r'fail|timed out|Timed out|Error|Login incorrect|denied|Problem' \
-                                  r'|NOT|Invalid|No memory|Failed|mismatch|Bad|bogus|lose|abort' \
+                                  r'|NOT|Invalid|No memory|Failed(?! to generate persistent self-signed certificate)|mismatch|Bad|bogus|lose|abort' \
                                   r'|Not |too big|exceeds|detected|[Nn]o route to host' \
                                   r'|image is not allowed|Could not resolve|No such'
-        self.copy_retry_message = r'fail|[Tt]imed out|Error|Problem|NOT|Failed|Bad|bogus|lose|abort|Not |too big|exceeds|detected'
+        self.copy_retry_message = r'fail|[Tt]imed out|Error|Problem|NOT|Failed(?! to generate persistent self-signed certificate)|Bad|bogus|lose|abort|Not |too big|exceeds|detected'
         self.copy_continue = r'Are you sure you want to continue connecting ((yes/no)|\((yes/no(/\[fingerprint\])?)?\))?'
         self.copy_other = r'^.*\[yes\/no\]\s*\?*\s*$'
         self.remote_param ='ftp:|tftp:|http:|rcp:|scp:'
         self.remote_in_dest = r'(ftp:|sftp:|tftp:|http:|rcp:|scp:)/*$'
         self.addr_in_remote = r'(ftp:|tftp:|http:|rcp:|scp:)\/*([\w\.\:]+)'
+        self.abort_copy = r'Abort Copy\? \[confirm\]\s*$'
 
 class HaReloadPatterns(UniconCorePatterns):
     def __init__(self):
         super().__init__()
         self.savenv = r'^.*System configuration has been modified\. Save.*$'
-        self.reload_proceed = r'^(.*)Proceed with reload\?\s*\[confirm\]$|^.*Escape character is.*\n'
+        self.reload_proceed = r'^(.*)Proceed with( quick)? reload\?\s*\[confirm\]\s*$'
         self.reload_entire_shelf = r'Reload the entire shelf\s*\[confirm\]'
         self.reload_this_shelf = r'Reload this shelf\s*\[confirm\]'
         self.default_prompts = r'(Router|Switch|ios|Switch-standby)(\\(boot\\))?(>|#)'
@@ -186,7 +188,7 @@ class HaReloadPatterns(UniconCorePatterns):
 class SwitchoverPatterns:
     def __init__(self):
         self.save_config = r'^.*System configuration has been modified\.\s*Save\s?\?.*$'
-        self.build_config= r'Building configuration'
+        self.build_config = r'Building configuration'
         self.prompt_switchover = r'This will reload the active unit and force switchover to standby\[confirm\]'
         self.switchover_init = r'Preparing for switchover|LOGGER_FLUSHING|RELOAD|Reload'
         self.switchover_reason = r'^(.*)Reset Reason'
@@ -195,6 +197,8 @@ class SwitchoverPatterns:
         self.switchover_fail3 = r'% There is no STANDBY present\.?'
         self.switchover_fail4 = r'Failed to switchover'
         self.switchover_cmd_issued = r'Resetting ...(.*)'
+        self.switchover_proceed = r'^.*Proceed with switchover to standby RP\? \[confirm\]'
+
 
 class ResetStandbyPatterns:
     def __init__(self):

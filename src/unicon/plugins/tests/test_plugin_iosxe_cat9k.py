@@ -520,6 +520,45 @@ class TestIosXECat9kPluginReload(unittest.TestCase):
         d.configure("no boot system")
         d.disconnect()
 
+    def test_no_boot_system_1(self):
+        d = Connection(hostname='Router',
+                       start=['mock_device_cli --os iosxe --state c9k_enable4'],
+                       os='iosxe',
+                       platform='cat9k',
+                       credentials=dict(default=dict(username='admin', password='cisco')),
+                       settings=dict(POST_DISCONNECT_WAIT_SEC=0, GRACEFUL_DISCONNECT_WAIT_SEC=0.2),
+                       log_buffer=True
+                       )
+        d.connect()
+        d.settings.CONFIG_LOCK_RETRY_SLEEP = 1
+        d.configure(["no boot system",
+                     "no boot system"])
+        d.disconnect()
+
+    def test_quick_reload(self):
+        md = MockDeviceTcpWrapperIOSXE(port=0, state='c9k_enable')
+        md.start()
+
+        c = Connection(
+            hostname='switch',
+            start=['telnet 127.0.0.1 {}'.format(md.ports[0])],
+            os='iosxe',
+            platform='cat9k',
+            settings=dict(POST_DISCONNECT_WAIT_SEC=0, GRACEFUL_DISCONNECT_WAIT_SEC=0.2),
+            credentials=dict(default=dict(username='cisco', password='cisco'),
+                             alt=dict(username='admin', password='lab')),
+            mit=True
+        )
+        try:
+            c.connect()
+            c.settings.POST_RELOAD_WAIT = 1
+            c.execute('quick reload') # prepare state
+            c.reload(timeout=10)
+            self.assertEqual(c.state_machine.current_state, 'enable')
+        finally:
+            c.disconnect()
+            md.stop()
+
 
 class TestIosXeCat9kPluginContainer(unittest.TestCase):
 
@@ -530,6 +569,7 @@ class TestIosXeCat9kPluginContainer(unittest.TestCase):
                        platform='cat9k',
                        log_buffer=True,
                        init_config_commands=[])
+        c.settings.CONTAINER_EXIT_CMDS = ['exit\r', '\x03', '\x03', '\x03']
         c.connect()
         c.disconnect()
 

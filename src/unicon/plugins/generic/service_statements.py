@@ -119,6 +119,26 @@ def ping_handler_1(spawn, context, send_key):
     spawn.sendline(context[send_key])
 
 
+def lsrtv_handler(spawn, context):
+    selection = spawn.match.last_match.group(1)
+    if context.get('extended_verbose') and 'V' not in selection:
+        spawn.sendline('v')
+        return
+    if context.get('timestamp_count') and 'T' not in selection:
+        spawn.sendline('t')
+        return
+    if context.get('record_hops') and 'R' not in selection:
+        spawn.sendline('r')
+        return
+    if context.get('src_route_type', '').lower() == 'loose' and 'L' not in selection:
+        spawn.sendline('l')
+        return
+    if context.get('src_route_type', '').lower() == 'strict' and 'S' not in selection:
+        spawn.sendline('s')
+        return
+    spawn.sendline()
+
+
 def send_multicast(spawn, context):
     if context.get('multicast'):
         spawn.sendline(context['multicast'])
@@ -603,6 +623,39 @@ packet = Statement(pattern=pat.packet,
                    loop_continue=True,
                    continue_timer=False)
 
+lsrtv_stmt = Statement(pattern=pat.lsrtv,
+                       action=lsrtv_handler,
+                       loop_continue=True,
+                       continue_timer=False)
+
+lsrtv_timestamp = Statement(pattern=pat.lsrtv_timestamp_count,
+                            action=ping_handler,
+                            args={'send_key': 'timestamp_count'},
+                            loop_continue=True,
+                            continue_timer=False)
+
+lsrtv_hop_count = Statement(pattern=pat.lsrtv_hop_count,
+                            action=ping_handler,
+                            args={'send_key': 'record_hops'},
+                            loop_continue=True,
+                            continue_timer=False)
+
+lsrtv_source = Statement(pattern=pat.lsrtv_source,
+                         action=ping_handler,
+                         args={'send_key': 'src_route_addr'},
+                         loop_continue=True,
+                         continue_timer=False)
+
+lsrtv_one_allowed = Statement(pattern=pat.lsrtv_one_allowed,
+                              action=ping_invalid_input_handler,
+                              loop_continue=True,
+                              continue_timer=False)
+
+lsrtv_noroom = Statement(pattern=pat.lsrtv_noroom,
+                              action=ping_invalid_input_handler,
+                              loop_continue=True,
+                              continue_timer=False)
+
 ####################################################################
 # Traceroute Statements
 ####################################################################
@@ -728,6 +781,11 @@ invalid_input = Statement(pattern=pat.invalid_command,
 extended_ping_dialog_list = [invalid_input, unkonwn_protocol, protocol, transport,
                              mask, address, vcid, tunnel, repeat, size, verbose,
                              interval, packet_timeout, sending_interval,
+                             # error patterns:
+                             lsrtv_noroom, lsrtv_one_allowed,
+                             # the error patterns need to come before lsrtv_stmt
+                             lsrtv_stmt,
+                             lsrtv_timestamp, lsrtv_hop_count, lsrtv_source,
                              output_interface, novell_echo_type, vrf, ext_cmds,
                              sweep_range, range_interval, range_max, range_min,
                              dest_start, interface, dest_end, increment,
@@ -957,6 +1015,12 @@ dest_directory = Statement(pattern=pat.dest_directory,
                            loop_continue=True,
                            continue_timer=False)
 
+abort_copy_stmt = Statement(pattern=pat.abort_copy,
+                            action=send_response,
+                            args={'response': 'n'},
+                            loop_continue=True,
+                            continue_timer=False)
+
 copy_statement_list = [copy_retry_message, copy_error_message, source_filename,
                        copy_file, src_file, hostname, dest_file, dest_directory,
                        host, nx_hostname, partition, config, writeto,
@@ -965,7 +1029,7 @@ copy_statement_list = [copy_retry_message, copy_error_message, source_filename,
                        copy_confirm_yes, copy_reconfirm, copy_reconfirm,
                        copy_progress, rcp_confirm, copy_overwrite, copy_nx_vrf,
                        copy_proceed, tftp_addr, copy_continue, copy_complete,
-                       copy_other]
+                       copy_other, abort_copy_stmt]
 
 
 #############################################################################
@@ -1131,13 +1195,19 @@ switchover_cmd_issued = Statement(pattern=pat.switchover_cmd_issued,
                                   loop_continue=False,
                                   continue_timer=False)
 
+switchover_proceed = Statement(
+    pattern=pat.switchover_proceed,
+    action='sendline()', args=None, loop_continue=True, continue_timer=False
+)
+
 switchover_statement_list = [save_config, build_config, prompt_switchover,
                              switchover_init, switchover_reason,
                              switchover_fail1, switchover_fail2,
                              switchover_fail3, switchover_fail4,
                              press_enter, login_stmt, password_stmt,
                              generic_statements.password_ok_stmt,
-                             generic_statements.syslog_msg_stmt
+                             generic_statements.syslog_msg_stmt,
+                             switchover_proceed
                              ]
 
 ############################################################

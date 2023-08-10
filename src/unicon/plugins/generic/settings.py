@@ -43,6 +43,7 @@ class GenericSettings(Settings):
             'stty cols 200',
             'stty rows 200'
         ]
+        self.ROMMON_INIT_COMMANDS = []
 
         self.SWITCHOVER_COUNTER = 50
         self.SWITCHOVER_TIMEOUT = 500
@@ -52,6 +53,13 @@ class GenericSettings(Settings):
         self.POST_RELOAD_WAIT = 60
         self.RELOAD_RECONNECT_ATTEMPTS = 3
         self.CONSOLE_TIMEOUT = 60
+        self.BOOT_TIMEOUT = 600
+        self.MAX_BOOT_ATTEMPTS = 3
+
+        # for rommon boot, try to find image on flash
+        self.FIND_BOOT_IMAGE = True
+        self.BOOT_FILESYSTEM = 'bootflash:'
+        self.BOOT_FILE_REGEX = r'(\S+\.bin)'
 
         # Wait for the config prompt to appear
         # before checking for the config prompt.
@@ -103,6 +111,9 @@ class GenericSettings(Settings):
         self.GUESTSHELL_RETRIES = 20
         self.GUESTSHELL_RETRY_SLEEP = 5
 
+        self.SHOW_REDUNDANCY_CMD = 'sh redundancy stat | inc my state'
+        self.REDUNDANCY_STATE_PATTERN = r'my state = (.*?)\s*$'
+
         # Default error pattern
         self.ERROR_PATTERN = [r"% Invalid command at",
                               r"% Invalid input detected at",
@@ -136,9 +147,17 @@ class GenericSettings(Settings):
         self.BULK_CONFIG_CHUNK_LINES = 50
         self.BULK_CONFIG_CHUNK_SLEEP = 0.5
 
-        # for execute matched retry on state pattern
+        # for execute matched retry on statement pattern
         self.EXECUTE_MATCHED_RETRIES = 1
         self.EXECUTE_MATCHED_RETRY_SLEEP = 0.05
+
+        # for configure matched retry on statement pattern
+        self.CONFIGURE_MATCHED_RETRIES = 1
+        self.CONFIGURE_MATCHED_RETRY_SLEEP = 0.05
+
+        # execute statement match retry for state change patterns
+        self.EXECUTE_STATE_CHANGE_MATCH_RETRIES = 1
+        self.EXECUTE_STATE_CHANGE_MATCH_RETRY_SLEEP = 3
 
         # User defined login and password prompt pattern.
         self.LOGIN_PROMPT = None
@@ -274,8 +293,3 @@ class GenericSettings(Settings):
                 'os': ['windows'],
             },
         }
-
-#TODO
-#take addtional dialogs for all service
-#move all commands to settings
-#

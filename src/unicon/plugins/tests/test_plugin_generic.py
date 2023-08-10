@@ -593,9 +593,10 @@ class TestConfigureService(unittest.TestCase):
             tacacs_password='cisco',
             enable_password='cisco',
             mit=True,
-            log_buffer=True
+            log_buffer=True,
         )
         cls.d.connect()
+    
 
         cls.ha = MockDeviceTcpWrapperIOS(port=0, state='enable,exec_standby')
         cls.ha.start()
@@ -682,6 +683,13 @@ class TestConfigureService(unittest.TestCase):
         with self.assertRaises(StateMachineError):
             self.d.configure('no logging console', lock_retries=2)
 
+    def test_change_state(self):
+        with self.assertRaises(StateMachineError):
+            self.d.configure(['go to enable','go to config'], allow_state_change = False)
+        self.d.configure(['go to enable','go to config'], allow_state_change = True)
+        self.assertEqual(self.d.state_machine.current_state, 'enable')
+
+
     def test_configure_error_pattern(self):
         with self.assertRaises(SubCommandFailure):
             self.d.configure('Not valid configuration',
@@ -752,7 +760,7 @@ class TestConfigureService(unittest.TestCase):
         c.configure('exit')
         self.assertEqual(c.state_machine.current_state, 'enable')
 
-        with self.assertRaises(SubCommandFailure):
+        with self.assertRaises(StateMachineError):
             c.configure('exitt')
 
         c.configure(['line console', 'exit', 'exit'])
@@ -1364,6 +1372,81 @@ class TestGenericReload(unittest.TestCase):
             self.assertEqual(d.reload.error_pattern, error_pattern)
         finally:
              d.disconnect()
+
+
+class TestGenericConnectionRefused(unittest.TestCase):
+
+    def test_connection_refused_handler_with_peripheral(self):
+        md = MockDeviceTcpWrapper(device_os='iosxe', hostname='R1',
+            port=0, state='connection_refused')
+        md.start()
+        template_testbed = """
+        devices:
+          R1:
+            os: iosxe
+            credentials:
+                default:
+                    username: cisco
+                    password: cisco
+            connections:
+              defaults:
+                class: unicon.Unicon
+              a:
+                protocol: telnet
+                ip: 127.0.0.1
+                port: {}
+            peripherals:
+                terminal_server:
+                    ts: [20]
+          ts:
+            os: ios
+            credentials:
+                default:
+                    username: cisco
+                    password: cisco
+            connections:
+                cli:
+                    command: mock_device_cli --os ios --state exec --hostname ts
+        """.format(md.ports[0])
+        t = loader.load(template_testbed)
+        d = t.devices.R1
+        try:
+            d.connect()
+        finally:
+            d.disconnect()
+            md.stop()
+
+    def test_connection_refused_handler_without_peripheral(self):
+        md = MockDeviceTcpWrapper(device_os='iosxe', hostname='R1',
+            port=0, state='connection_refused')
+        md.start()
+        template_testbed = """
+        devices:
+          R1:
+            os: iosxe
+            credentials:
+                default:
+                    username: cisco
+                    password: cisco
+            connections:
+              defaults:
+                class: unicon.Unicon
+              a:
+                protocol: telnet
+                ip: 127.0.0.1
+                port: {}
+        """.format(md.ports[0])
+        t = loader.load(template_testbed)
+        d = t.devices.R1
+        with self.assertRaisesRegex(unicon.core.errors.ConnectionError,
+            'failed to connect to R1'):
+            try:
+                d.connect()
+            finally:
+                d.disconnect()
+                md.stop()
+
+
 
 if __name__ == "__main__":
     unittest.main()

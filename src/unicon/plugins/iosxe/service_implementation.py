@@ -18,7 +18,8 @@ from unicon.plugins.generic.service_implementation import (
     Copy as GenericCopy,
     ResetStandbyRP as GenericResetStandbyRP,
     Reload as GenericReload,
-    Enable as GenericEnable)
+    Enable as GenericEnable,
+    ContextMgrBaseService)
 
 
 from .service_statements import execute_statement_list, configure_statement_list, confirm
@@ -160,6 +161,10 @@ class BashService(GenericBashService):
             handle.context['_rp'] = kwargs.get('rp')
         else:
             handle.context.pop('_rp', None)
+        if kwargs.get('chassis'):
+            handle.context['_chassis'] = kwargs.get('chassis')
+        else:
+            handle.context.pop('_chassis', None)
         super().pre_service(*args, **kwargs)
 
     class ContextMgr(GenericBashService.ContextMgr):
@@ -365,4 +370,15 @@ class Tclsh(Execute):
         self.start_state = 'tclsh'
         self.end_state = 'tclsh'
         self.service_name = 'tclsh'
+        self.__dict__.update(kwargs)
+
+class MaintenanceMode(ContextMgrBaseService):
+
+    def __init__(self, connection, context, **kwargs):
+        super().__init__(connection, context, **kwargs)
+        self.context_state = 'maintenance'
+        self.service_name = 'maintenance'
+        self.start_state = "enable"
+        self.end_state = "enable"
+
         self.__dict__.update(kwargs)
