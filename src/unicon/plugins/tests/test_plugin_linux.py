@@ -33,10 +33,10 @@ from unicon.mock.mock_device import mockdata_path
 with open(os.path.join(mockdata_path, 'linux/linux_mock_data.yaml'), 'rb') as datafile:
     mock_data = yaml.safe_load(datafile.read())
 
+unicon.settings.Settings.POST_DISCONNECT_WAIT_SEC = 0
+unicon.settings.Settings.GRACEFUL_DISCONNECT_WAIT_SEC = 0
 
 
-@patch.object(unicon.settings.Settings, 'POST_DISCONNECT_WAIT_SEC', 0)
-@patch.object(unicon.settings.Settings, 'GRACEFUL_DISCONNECT_WAIT_SEC', 0)
 class TestLinuxPluginConnect(unittest.TestCase):
 
     def test_connect_ssh(self):
@@ -316,6 +316,9 @@ class TestLearnHostname(unittest.TestCase):
           'sma_prompt' : 'sma03',
           'sma_prompt_1' : 'pod-esa01',
           'exec18': LinuxSettings().DEFAULT_LEARNED_HOSTNAME,
+          'exec20': 'Linux',
+          'exec21': 'mock-server',
+          'ansi_prompt': 'apc'
         }
 
         for state in states:
@@ -348,6 +351,8 @@ class TestLearnHostname(unittest.TestCase):
                 self.assertEqual(x.replace('\r', ''), mock_data['exec']['commands']['banner1']['response'].strip())
                 x = c.execute('banner2')
                 self.assertEqual(x.replace('\r', ''), mock_data['exec']['commands']['banner2']['response'].strip())
+                x = c.execute('uname')
+                self.assertEqual(x, '\r\nLinux')
 
     def test_connect_disconnect_without_learn_hostname(self):
         testbed = """
@@ -548,7 +553,7 @@ class TestLinuxPluginTERM(unittest.TestCase):
         # echo $TERM is matched as a prompt pattern depending on timing
         l.state_machine.get_state('shell').pattern = r'^(.*?([>~%]|[^#\s]#))\s?$'
         term = l.execute('echo $TERM')
-        self.assertEqual(term, l.settings.TERM)
+        self.assertEqual(term.strip(), l.settings.TERM.strip())
 
     def test_os_TERM(self):
         testbed = """
@@ -574,7 +579,7 @@ class TestLinuxPluginTERM(unittest.TestCase):
         # echo $TERM is matched as a prompt pattern depending on timing
         l.state_machine.get_state('shell').pattern = r'^(.*?([>~%]|[^#\s]#))\s?$'
         term = l.execute('echo $TERM')
-        self.assertEqual(term, os.environ.get('TERM', 'dumb'))
+        self.assertEqual(term.strip(), os.environ.get('TERM', 'dumb').strip())
 
 class TestLinuxPluginENV(unittest.TestCase):
 
@@ -598,7 +603,7 @@ class TestLinuxPluginENV(unittest.TestCase):
         lc = l.execute('echo $LC_ALL')
         self.assertIn(l.settings.ENV['LC_ALL'], lc)
         size = l.execute('stty size')
-        self.assertEqual(size, '200 200')
+        self.assertEqual(size.strip(), '200 200')
 
 
 class TestLinuxPluginExecute(unittest.TestCase):
@@ -671,7 +676,11 @@ class TestLinuxPluginExecute(unittest.TestCase):
     def test_sudo_handler(self):
         self.c.execute('sudo')
         self.assertEqual(self.c.spawn.match.match_output,
-                         ' sudo_password\r\nLinux# ')
+                         'sudo_password\r\nLinux# ')
+
+        self.c.execute('sudo2')
+        self.assertEqual(self.c.spawn.match.match_output,
+                         'sudo_password\r\nLinux# ')
 
         self.c.context.credentials['sudo']['password'] = 'unknown'
         with self.assertRaises(unicon.core.errors.SubCommandFailure):
@@ -680,7 +689,7 @@ class TestLinuxPluginExecute(unittest.TestCase):
         self.c.context.credentials['sudo']['password'] = 'sudo_password'
         self.c.sudo()
         self.assertEqual(self.c.spawn.match.match_output,
-                         ' sudo_password\r\nLinux# ')
+                         'sudo_password\r\nLinux# ')
         self.c.execute('exit')
         self.assertEqual(self.c.spawn.match.match_output,
                          'exit\r\nLinux$ ')
@@ -692,7 +701,7 @@ class TestLinuxPluginExecute(unittest.TestCase):
         with self.assertRaises(unicon.core.errors.SubCommandFailure):
             self.c.execute('sudo_invalid')
         self.assertEqual(self.c.spawn.match.match_output,
-                         ' invalid\r\nSorry, try again.\r\n[sudo] password for cisco:')
+                         'invalid\r\nSorry, try again.\r\n[sudo] password for cisco: ')
 
 
 @patch.object(unicon.settings.Settings, 'POST_DISCONNECT_WAIT_SEC', 0)
@@ -755,6 +764,43 @@ class TestLinuxPromptOverride(unittest.TestCase):
                        learn_hostname=True)
         c.connect()
         assert c.state_machine.states[0].pattern == prompt
+
+
+
+class TestTrexConsole(unittest.TestCase):
+
+    def test_trex_console(self):
+        c = Connection(hostname='linux',
+                       start=['mock_device_cli --os linux --state exec'],
+                       os='linux',
+                       platform='trex',
+                       learn_hostname=True
+                       )
+        c.connect()
+        try:
+          c.execute('trex-console', allow_state_change=True)
+          output = c.execute('help')
+          assert output == 'help'
+          c.execute('exit', allow_state_change=True)
+        finally:
+          c.disconnect()
+
+
+    def test_trex_console_context_manager(self):
+        c = Connection(hostname='linux',
+                       start=['mock_device_cli --os linux --state exec'],
+                       os='linux',
+                       platform='trex',
+                       learn_hostname=True
+                       )
+        c.connect()
+        try:
+          with c.trex_console() as trex_cli:
+            output = trex_cli.execute('help')
+            assert output == 'help'
+        finally:
+          c.disconnect()
+
 
 
 if __name__ == "__main__":

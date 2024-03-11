@@ -2,6 +2,7 @@
 import time
 from unicon.eal.dialogs import Statement
 from unicon.plugins.generic.service_statements import reload_statement_list
+from unicon.plugins.iosxe.service_statements import factory_reset_confirm, are_you_sure_confirm
 from .service_patterns import StackIosXESwitchoverPatterns, StackIosXEReloadPatterns
 
 def update_curr_state(spawn, context, state):
@@ -32,7 +33,7 @@ switchover_pat = StackIosXESwitchoverPatterns()
 save_config = Statement(pattern=switchover_pat.save_config,
                         action='sendline(yes)',
                         loop_continue=True, continue_timer=False)
-proceed_sw = Statement(pattern=switchover_pat.proceed_switchover,
+proceed_sw = Statement(pattern=switchover_pat.switchover_proceed,
                         action='sendline()',
                         loop_continue=True, continue_timer=False)
 commit_changes = Statement(pattern=switchover_pat.cisco_commit_changes_prompt,
@@ -118,11 +119,19 @@ reload_shelf = Statement(pattern=reload_pat.reload_entire_shelf,
                          loop_continue=True,
                          continue_timer=False)
 
+reload_fast = Statement(pattern=reload_pat.reload_fast,
+                         action='sendline()',
+                         loop_continue=True,
+                         continue_timer=False)
+
 stack_reload_stmt_list = list(reload_statement_list)
 
 stack_reload_stmt_list.extend([en_state, dis_state])
 stack_reload_stmt_list.insert(0, press_return)
 stack_reload_stmt_list.insert(0, reload_shelf)
+stack_reload_stmt_list.insert(0, reload_fast)
+
+stack_factory_reset_stmt_list = [factory_reset_confirm, are_you_sure_confirm]
 
 send_boot = Statement(pattern=switchover_pat.rommon_prompt,
                       action=send_boot_cmd, loop_continue=False,

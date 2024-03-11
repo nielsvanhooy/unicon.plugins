@@ -8,6 +8,7 @@ Uses the unicon.plugins.tests.mock.mock_device_ios script to test IOSXE plugin.
 __author__ = "Myles Dear <mdear@cisco.com>"
 
 import re
+import time
 import unittest
 from unittest.mock import patch
 
@@ -405,6 +406,29 @@ class TestIosXEluginBashService(unittest.TestCase):
         self.assertIn('R1#', c.spawn.match.match_output)
         c.disconnect()
 
+    def test_bash_chassis_active(self):
+        c = Connection(hostname='WLC1',
+                       start=['mock_device_cli --os iosxe --state general_enable --hostname WLC1'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='cisco', password='cisco')),
+                       log_buffer=True)
+        with c.bash_console(chassis='active r0') as console:
+            console.execute('ls')
+        self.assertIn('exit', c.spawn.match.match_output)
+        self.assertIn('WLC1#', c.spawn.match.match_output)
+        c.disconnect()
+
+    def test_bash_chassis_standby(self):
+        c = Connection(hostname='WLC1',
+                       start=['mock_device_cli --os iosxe --state general_enable --hostname WLC1'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='cisco', password='cisco')),
+                       log_buffer=True)
+        with c.bash_console(chassis='standby r0') as console:
+            console.execute('ls')
+        self.assertIn('exit', c.spawn.match.match_output)
+        self.assertIn('WLC1#', c.spawn.match.match_output)
+        c.disconnect()
 
 class TestIosXESDWANConfigure(unittest.TestCase):
 
@@ -470,6 +494,29 @@ class TestIosXEC8KvPluginReload(unittest.TestCase):
         self.c.settings.POST_RELOAD_WAIT = 1
         self.c.reload(grub_boot_image='GOLDEN')
 
+class TestIosXECat9kPluginReload(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.c = Connection(
+            hostname='switch',
+            start=['mock_device_cli --os iosxe --state general_enable --hostname switch'],
+            os='iosxe',
+            platform='cat9k',
+            credentials=dict(default=dict(
+                username='cisco', password='cisco', enable_password='Secret12345')),
+            log_buffer=True,
+            mit=True
+            )
+        cls.c.connect()
+
+    @classmethod
+    def tearDownClass(cls):
+         cls.c.disconnect()
+
+    def test_reload1(self):
+         self.c.reload(reload_command='reload1', post_reload_wait_time=1)
+         self.assertEqual(self.c.reload.post_reload_wait_time, 1)
 
 class TestIosXECat3kPluginReload(unittest.TestCase):
 
@@ -824,7 +871,7 @@ class TestIosXEEnableSecret(unittest.TestCase):
                        os='iosxe',
                        init_exec_commands=[],
                        init_config_commands=[],
-                       credentials=dict(default=dict(password='badpw')),
+                       credentials=dict(default=dict(password='veryverybadpw')),
                        log_buffer=True
                        )
         with self.assertRaisesRegex(UniconConnectionError, 'failed to connect to R1'):
@@ -867,8 +914,43 @@ class TestIosXEEnableSecret(unittest.TestCase):
                   init_config_commands: []
         """)
         dev = tb.devices.R1
-        dev.connect()
-        dev.disconnect()
+        try:
+            output = dev.connect()
+            self.assertIn('Enter your selection [2]: 2\r\n', output)
+        finally:
+            dev.disconnect()
+
+    def test_enable_secret_no_password(self):
+        self.maxDiff = None
+        c = Connection(hostname='R1',
+                       start=['mock_device_cli --os iosxe --state initial_config_dialog --hostname R1'],
+                       os='iosxe',
+                       init_exec_commands=[],
+                       init_config_commands=[],
+                       credentials=dict(default=dict(password='')),
+                       log_buffer=True
+                       )
+        try:
+            output = c.connect()
+            self.assertIn('Enter your selection [2]: \n0', output)
+        finally:
+            c.disconnect()
+
+    def test_enable_secret_short_password(self):
+        self.maxDiff = None
+        c = Connection(hostname='R1',
+                       start=['mock_device_cli --os iosxe --state initial_config_dialog --hostname R1'],
+                       os='iosxe',
+                       init_exec_commands=[],
+                       init_config_commands=[],
+                       credentials=dict(default=dict(password='lab')),
+                       log_buffer=True
+                       )
+        try:
+            output = c.connect()
+            self.assertIn('Enter your selection [2]: \n0', output)
+        finally:
+            c.disconnect()
 
 
 class TestIosXEluginGuestShellService(unittest.TestCase):
@@ -960,6 +1042,18 @@ class TestSyslogHandler(unittest.TestCase):
             raise
         finally:
             c.disconnect()
+
+    def test_syslog_handler_error_opening_pattern(self):
+        d = Connection(
+            hostname='Router',
+            start=['mock_device_cli --os iosxe --state error_opening_syslog --hostname Router'],
+            os='iosxe',
+            credentials=dict(default=dict(username='cisco', password='cisco')),
+            log_buffer=True
+        )
+
+        d.connect()
+        d.disconnect()
 
     def test_syslog_handler_guestshell(self):
         c = Connection(
@@ -1072,6 +1166,18 @@ class TestIosxeTclsh(unittest.TestCase):
         c.enable()
         c.disconnect()
 
+    def test_tclsh_long_hostname(self):
+        c = Connection(
+            hostname='very-very-long-hostname',
+            start=['mock_device_cli --os iosxe --state general_enable --hostname very-very-long-hostname'],
+            os='iosxe',
+            mit=True
+        )
+        c.connect()
+        c.execute('long_hostname')
+        c.tclsh()
+        c.enable()
+        c.disconnect()
 
 class TestConfigTransition(unittest.TestCase):
 
@@ -1104,6 +1210,100 @@ class TestConfigTransition(unittest.TestCase):
         # This was causing issues and should not fail with this test
         c.state_machine.learn_hostname = True
         c.configure()
+
+
+class TestRommonCommands(unittest.TestCase):
+
+    def test_rommon_command_false_prompt_avoidance(self):
+        c = Connection(
+            hostname='PE1',
+            start=['mock_device_cli --os iosxe --state rommon_command_output_not_a_prompt --hostname PE1'],
+            os='iosxe',
+            learn_hostname=True,
+            credentials=dict(default=dict(username='cisco', password='cisco')),
+            settings={'ROMMON_INIT_COMMANDS': ['notaprompt'], 'EXECUTE_STATE_CHANGE_MATCH_RETRY_SLEEP': 3}
+        )
+        try:
+            c.connect()
+        finally:
+            c.disconnect()
+
+    def test_rommon_command_false_prompt(self):
+        c = Connection(
+            hostname='PE1',
+            start=['mock_device_cli --os iosxe --state rommon_command_output_not_a_prompt2 --hostname PE1'],
+            os='iosxe',
+            learn_hostname=True,
+            credentials=dict(default=dict(username='cisco', password='cisco')),
+            settings={
+                'ROMMON_INIT_COMMANDS': ['notaprompt'],
+                'EXECUTE_STATE_CHANGE_MATCH_RETRIES': 0,
+                'EXECUTE_STATE_CHANGE_MATCH_RETRY_SLEEP': 1
+            },
+            debug=True
+        )
+        with self.assertRaisesRegex(UniconConnectionError,
+            "Expected device to reach 'rommon' state, but landed on 'enable' state."):
+            try:
+                c.connect()
+            finally:
+                c.disconnect()
+
+
+class TestCopy(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.c = Connection(
+            hostname='PE1',
+            start=['mock_device_cli --os iosxe --state general_enable --hostname PE1'],
+            os='iosxe',
+            mit=True
+        )
+        cls.c.connect()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.c.disconnect()
+
+    def test_copy(self):
+        self.c.copy(source='test.cfg', dest='running-config')
+
+    def test_copy_abort_n(self):
+        self.c.copy(source='somefile.bin', dest='flash:')
+
+
+class TestMaintenanceMode(unittest.TestCase):
+
+    def test_maintenance_mode_context_manager(self):
+        c = Connection(
+            hostname='PE1',
+            start=['mock_device_cli --os iosxe --state general_enable --hostname PE1'],
+            os='iosxe',
+            mit=True
+        )
+        c.connect()
+        c.settings.MAINTENANCE_MODE_WAIT_TIME = 1
+        c.settings.MAINTENANCE_MODE_TIMEOUT = 10
+        with c.maintenance_mode() as m:
+            output = m.execute('help')
+            self.assertEqual(output, 'help')
+        c.disconnect()
+
+    def test_switchto_maintenance(self):
+        c = Connection(
+            hostname='PE1',
+            start=['mock_device_cli --os iosxe --state general_enable --hostname PE1'],
+            os='iosxe',
+            mit=True
+        )
+        c.connect()
+        c.settings.MAINTENANCE_MODE_WAIT_TIME = 1
+        c.settings.MAINTENANCE_MODE_TIMEOUT = 10
+        c.switchto('maintenance')
+        c.switchto('enable')
+        c.disconnect()
+
 
 
 if __name__ == "__main__":

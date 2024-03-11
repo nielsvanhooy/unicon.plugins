@@ -13,7 +13,7 @@ general_password:
 
 general_exec:
   prompt: "%N>"
-  commands:
+  commands: &gen_exec_cmds
     "term length 0": ""
     "term width 0": ""
     "show version": &SV |2
@@ -73,6 +73,14 @@ general_exec:
       new_state: enable_password
 
 
+general_exec_no_password:
+  prompt: "%N>"
+  commands:
+    <<: *gen_exec_cmds
+    "enable":
+      new_state: general_enable
+
+
 enable_password:
   prompt: "Password: "
   commands:
@@ -82,6 +90,8 @@ enable_password:
 general_enable:
   prompt: "%N#"
   commands: &gen_enable_cmds
+    "start maintenance":
+      new_state: general_maintence_mode_confirm
     "term length 0": ""
     "term width 0": ""
     "show version": *SV
@@ -99,7 +109,7 @@ general_enable:
 
          21  -rw-   439612520  Mar 22 2017 00:16:56 +00:00  general_image.issu-asr-lns
       78704144384 bytes total (72496394240 bytes free)
-   
+
 
     "config term":
       new_state: general_config
@@ -108,14 +118,14 @@ general_enable:
       new_state: general_act_reply
 
     "show redundancy sta |  in peer": |2
-           peer state = 8  -STANDBY HOT 
+           peer state = 8  -STANDBY HOT
     "show redundancy sta | inc Redundancy State": |2
       Redundancy State              = sso
     "sh redundancy stat | inc my state": |2
-             my state = 13 -ACTIVE 
+             my state = 13 -ACTIVE
     "sh redundancy state": |2
-             my state = 13 -ACTIVE 
-           peer state = 8  -STANDBY HOT 
+             my state = 13 -ACTIVE
+           peer state = 8  -STANDBY HOT
                  Mode = Duplex
                  Unit = Primary
               Unit ID = 48
@@ -129,13 +139,15 @@ general_enable:
 
          client count = 84
        client_notification_TMR = 30000 milliseconds
-                 RF debug mask = 0x0   
+                 RF debug mask = 0x0
     "redundancy force-switchover":
       new_state: enable_general_standby
     "reload_config_dialog":
       new_state: enable_reload_config_dialog
     "reload":
       new_state: ha_reload_proceed
+    "reload1":
+      new_state: reload_proceed_confirm
     "active_install_add":
        new_state: install_add_commit
     "trim":
@@ -154,9 +166,9 @@ general_enable:
       IOx Infrastructure Summary:
       ---------------------------
       IOx service (CAF)              : Running
-      IOx service (HA)               : Running 
-      IOx service (IOxman)           : Not Ready 
-      IOx service (Sec storage)      : Running 
+      IOx service (HA)               : Running
+      IOx service (IOxman)           : Not Ready
+      IOx service (Sec storage)      : Running
       Libvirtd 5.5.0                 : Running
       Dockerd 18.03.0                : Running
       Sync Status                    : Disabled
@@ -181,19 +193,19 @@ general_enable:
 
     "show archive": ""
     "show policy-map interface tenGigabitEthernet 2/0/11": |
-     TenGigabitEthernet2/0/11 
+     TenGigabitEthernet2/0/11
 
       Service-policy input: set-exp
 
-        Class-map: dscp-cs1 (match-all)  
+        Class-map: dscp-cs1 (match-all)
           0 packets
           Match:  dscp cs1 (8)
           QoS Set
             mpls experimental imposition 1
 
-        Class-map: class-default (match-any)  
+        Class-map: class-default (match-any)
           32589133 packets
-          Match: any 
+          Match: any
     "show ip interface brief": |
       Interface              IP-Address      OK? Method Status                Protocol
       GigabitEthernet0/0/0   127.0.0.1       YES other  up                    up
@@ -207,6 +219,8 @@ general_enable:
     "write memory": ""
     "tclsh":
       new_state: tclsh
+    "long_hostname":
+      new_state: general_enable_long_hostname
     "delete /force flash:CRFT_*": ""
     "dir flash:CRFT_*": |
       Directory of flash:/CRFT_*
@@ -269,6 +283,124 @@ general_enable:
       new_state: bash_console_switch_standby_rp_active
     "show log | in BOOTTIME": "*Sep 22 14:46:00.419: %SYS-6-BOOTTIME: Time taken to reboot after reload =  417 seconds"
     "show log | in PLATFORM_SYS-6-UPTIME": "%PLATFORM_SYS-6-UPTIME: Time taken to initialize system =  364 seconds"
+    "copy  test.cfg running-config": |
+      Failed to generate persistent self-signed certificate.
+          Secure server will use temporary self-signed certificate.
+      Default AP group (default-group) is not configurable.
+      4177 bytes copied in 0.160 secs (26106 bytes/sec)
+
+    "request platform software system shell chassis active r0":
+      new_state: bash_console_chassis_active_r0
+
+    "request platform software system shell chassis standby r0":
+      new_state: bash_console_chassis_standby_r0
+
+    "copy  somefile.bin flash:":
+      new_state: confirm_abort_copy
+
+general_maintence_mode_confirm:
+  prompt: "Template default will be applied. Do you want to continue?[confirm] "
+  commands:
+    "":
+      new_state: general_maintenance_mode1
+
+general_maintenance_mode1:
+  prompt: "%N#"
+  commands:
+    <<: *gen_enable_cmds
+    "":
+      new_state: general_maintenance_mode2
+
+
+general_maintenance_mode2:
+  prompt: "%N#"
+  commands:
+    <<: *gen_enable_cmds
+    "":
+      new_state: general_maintenance_mode
+
+
+general_maintenance_mode:
+  prompt: "%N(maint-mode)#"
+  commands:
+    <<: *gen_enable_cmds
+    "help": "help"
+    "stop maintenance":
+      new_state: general_maintenance_mode_stop
+
+general_maintenance_mode_stop:
+  prompt: "WARNING: Please check configured protocol peer status first. If all peers are not fully up and established, GIR may declare a timeout and extend the maintenance window. Do you want to continue?[y/n]? [yes]: "
+  commands:
+    "yes":
+      new_state: general_maintenance_mode_stop1
+
+general_maintenance_mode_stop1:
+  prompt: "%N(maint-mode)#"
+  commands:
+    <<: *gen_enable_cmds
+    "":
+      new_state: general_maintenance_mode_stop2
+
+
+general_maintenance_mode_stop2:
+  prompt: "%N(maint-mode)#"
+  commands:
+    <<: *gen_enable_cmds
+    "":
+      new_state: general_enable
+
+
+general_maintence_mode_confirm:
+  prompt: "Template default will be applied. Do you want to continue?[confirm] "
+  commands:
+    "":
+      new_state: general_maintenance_mode1
+
+general_maintenance_mode1:
+  prompt: "%N#"
+  commands:
+    <<: *gen_enable_cmds
+    "":
+      new_state: general_maintenance_mode2
+
+
+general_maintenance_mode2:
+  prompt: "%N#"
+  commands:
+    <<: *gen_enable_cmds
+    "":
+      new_state: general_maintenance_mode
+
+
+general_maintenance_mode:
+  prompt: "%N(maint-mode)#"
+  commands:
+    <<: *gen_enable_cmds
+    "help": "help"
+    "stop maintenance":
+      new_state: general_maintenance_mode_stop
+
+general_maintenance_mode_stop:
+  prompt: "WARNING: Please check configured protocol peer status first. If all peers are not fully up and established, GIR may declare a timeout and extend the maintenance window. Do you want to continue?[y/n]? [yes]: "
+  commands:
+    "yes":
+      new_state: general_maintenance_mode_stop1
+
+general_maintenance_mode_stop1:
+  prompt: "%N(maint-mode)#"
+  commands:
+    <<: *gen_enable_cmds
+    "":
+      new_state: general_maintenance_mode_stop2
+
+
+general_maintenance_mode_stop2:
+  prompt: "%N(maint-mode)#"
+  commands:
+    <<: *gen_enable_cmds
+    "":
+      new_state: general_enable
+
 
 
 general_config:
@@ -391,7 +523,7 @@ config_general_server:
       "no shutdown": |
           no shutdown
           Certificate server 'no shut' event has been queued for processing.
-      "end": 
+      "end":
         new_state: general_enable
 
 config_general_redundancy_main_cpu:
@@ -446,23 +578,23 @@ standby_exec:
 
 iosxe_config_1:
   prompt: "%N(conf)#"
-  commands: 
+  commands:
     "identity number 101":
       new_state: iosxe_config_2
-    "end": 
+    "end":
       new_state: general_enable
 
 iosxe_config_2:
   prompt: "%N(config-gkm-group)#"
   commands:
-    "server local": 
+    "server local":
         new_state: iosxe_config_3
-    "end": 
+    "end":
         new_state: iosxe_config_1
 
 iosxe_config_3:
   prompt: "%N(config-gkm-group)#"
-  commands: 
+  commands:
     "end":
       new_state: iosxe_config_2
 diol_exec:
@@ -648,9 +780,9 @@ initial_config_dialog:
     timing:
       - 0:,0,0.01
     response: |2
-      
-      
-      
+
+
+
              --- System Configuration Dialog ---
 
   prompt: "\nWould you like to enter the initial configuration dialog? [yes/no]: "
@@ -658,7 +790,7 @@ initial_config_dialog:
     "no": &enable_secret
       new_state: enter_enable_secret
       response: |2
-          
+
           The enable secret is a password used to protect
           access to privileged EXEC and configuration modes.
           This password, after entered, becomes encrypted in
@@ -674,7 +806,7 @@ enter_enable_secret:
   prompt: "  Enter enable secret: "
   commands:
     "": "Please enter a secret"
-    "badpw":
+    "veryverybadpw":
       response: "%Password validation failed"
     "Secret12345":
       new_state: confirm_enable_secret
@@ -714,6 +846,8 @@ enter_selection:
         Building configuration...
         [OK]
         Use the enabled mode 'configure' command to modify this configuration.
+    "0":
+      new_state: general_exec_no_password
 
 
 press_return:
@@ -781,10 +915,19 @@ setup_enable_reload_confirm:
       response: file|mock_data/iosxe/asr1k_reload.txt
       new_state: system_config_confirm
 
+reload_proceed_confirm:
+  prompt: "Do you wish to proceed with reload anyway[confirm]"
+  commands:
+    "":
+      response: file|mock_data/iosxe/asr1k_reload.txt
+      new_state: press_return
+
 # System config
 system_config_confirm:
   prompt: "Would you like to enter the initial configuration dialog? [yes/no]: "
   commands:
+    "no":
+      new_state: general_exec
     "n":
       new_state: general_exec
     "yes":
@@ -844,23 +987,23 @@ management_setup_enter_interface:
     Current interface summary
 
     Interface              IP-Address      OK? Method Status                Protocol
-    GigabitEthernet0/0/0   unassigned      YES unset  administratively down down    
-    GigabitEthernet0/0/1   unassigned      YES unset  administratively down down    
-    GigabitEthernet0/0/2   unassigned      YES unset  administratively down down    
-    GigabitEthernet0/0/3   unassigned      YES unset  administratively down down    
-    GigabitEthernet0/0/4   unassigned      YES unset  administratively down down    
-    GigabitEthernet0/0/5   unassigned      YES unset  administratively down down    
-    GigabitEthernet0/0/6   unassigned      YES unset  administratively down down    
-    GigabitEthernet0/0/7   unassigned      YES unset  administratively down down    
-    Te0/1/0                unassigned      YES unset  administratively down down    
-    Te0/1/1                unassigned      YES unset  administratively down down    
-    Te0/1/2                unassigned      YES unset  administratively down down    
-    Te0/1/3                unassigned      YES unset  administratively down down    
-    Te0/1/4                unassigned      YES unset  administratively down down    
-    Te0/1/5                unassigned      YES unset  administratively down down    
-    Te0/1/6                unassigned      YES unset  administratively down down    
-    Te0/1/7                unassigned      YES unset  administratively down down    
-    GigabitEthernet0       unassigned      YES unset  administratively down down    
+    GigabitEthernet0/0/0   unassigned      YES unset  administratively down down
+    GigabitEthernet0/0/1   unassigned      YES unset  administratively down down
+    GigabitEthernet0/0/2   unassigned      YES unset  administratively down down
+    GigabitEthernet0/0/3   unassigned      YES unset  administratively down down
+    GigabitEthernet0/0/4   unassigned      YES unset  administratively down down
+    GigabitEthernet0/0/5   unassigned      YES unset  administratively down down
+    GigabitEthernet0/0/6   unassigned      YES unset  administratively down down
+    GigabitEthernet0/0/7   unassigned      YES unset  administratively down down
+    Te0/1/0                unassigned      YES unset  administratively down down
+    Te0/1/1                unassigned      YES unset  administratively down down
+    Te0/1/2                unassigned      YES unset  administratively down down
+    Te0/1/3                unassigned      YES unset  administratively down down
+    Te0/1/4                unassigned      YES unset  administratively down down
+    Te0/1/5                unassigned      YES unset  administratively down down
+    Te0/1/6                unassigned      YES unset  administratively down down
+    Te0/1/7                unassigned      YES unset  administratively down down
+    GigabitEthernet0       unassigned      YES unset  administratively down down
 
     Enter interface name used to connect to the
   prompt: "management network from the above interface summary: "
@@ -872,7 +1015,7 @@ management_setup_enter_interface:
 
 management_setup_config_show:
   preface: |2
-    
+
     The following configuration command script was created:
 
     hostname Router
@@ -1119,14 +1262,14 @@ ctc_shell_confirm:
 ctc_shell:
   preface: |
     2021/06/11 13:31:33 : Shell access was granted to user <anon>; Trace file: , /crashinfo/tracelogs/system_shell_R0-0.15090_0.20210611133133.bin
-    ********************************************************************** 
-    Activity within this shell can jeopardize the functioning 
+    **********************************************************************
+    Activity within this shell can jeopardize the functioning
     of the system.
     Use this functionality only under supervision of Cisco Support.
 
     Session will be logged to:
       crashinfo:tracelogs/system_shell_R0-0.15090_0.20210611133133.bin
-    ********************************************************************** 
+    **********************************************************************
     Terminal type 'xterm-256color' unknown.  Assuming vt100
 
   prompt: "[%N_1_RP_0:/]$ "
@@ -1199,6 +1342,13 @@ endless_syslog:
     "": "%MY-1-MSG: never ending message"
 
 
+error_opening_syslog:
+  prompt: "%Error opening tftp://255.255.255.255/network-confg (Timed out)"
+  commands:
+    "":
+      new_state: general_exec
+
+
 enable_reload_config_dialog:
   prompt: "%N#"
   commands:
@@ -1269,14 +1419,45 @@ meraki_container_ssh:
   prompt: "44-b6-be-0e-56-00-SFO-SMK-N-CA-switch:~$"
 
 
+general_enable_long_hostname:
+  commands:
+    <<: *gen_enable_cmds
+    "tclsh":
+      new_state: tclsh_long_hostname
+
+
 tclsh:
   prompt: "%N(tcl)#"
   commands:
     "exit":
       new_state: general_enable
 
+tclsh_long_hostname:
+  prompt: "very-very-long-hostn(tcl)#"
+  commands:
+    "exit":
+      new_state: general_enable
+
 bash_console_switch_standby_rp_active:
   prompt: "[%N_1_RP_0:/]$ "
+  commands:
+    "ls": "test.txt"
+    "stty cols 200": ""
+    "stty rows 200": ""
+    "exit":
+      new_state: general_enable
+
+bash_console_chassis_active_r0:
+  prompt: "[%N:/]$ "
+  commands:
+    "ls": "test.txt"
+    "stty cols 200": ""
+    "stty rows 200": ""
+    "exit":
+      new_state: general_enable
+
+bash_console_chassis_standby_r0:
+  prompt: "[%N:/]$ "
   commands:
     "ls": "test.txt"
     "stty cols 200": ""
@@ -1341,3 +1522,70 @@ slow_config_prompt:
     prompt: "%N(config)#"
     commands:
       <<: *general_config_cmds
+
+
+rommon_command_output_not_a_prompt:
+  prompt: "switch: "
+  commands:
+    "notaprompt":
+      timing:
+      - 0:,0,2
+      response: |2
+        Signature verification failed for key#
+
+    "boot":
+      new_state: general_exec
+
+rommon_command_output_not_a_prompt2:
+  prompt: "switch: "
+  commands:
+    "notaprompt":
+      timing:
+      - 0:1,0,2
+      - 1:,10
+      response: |2
+        Signature verification failed for key#
+
+    "boot":
+      new_state: general_exec
+
+
+connection_refused:
+  commands:
+    "":
+      response: |
+        telnet: connect to address 127.0.0.1: Connection refused
+      new_state: transition_to_general_enable1
+
+transition_to_general_enable1:
+  commands:
+    "":
+      response: |
+        telnet: connect to address 127.0.0.1: Connection refused
+      new_state: transition_to_general_enable2
+
+transition_to_general_enable2:
+  commands:
+    "":
+      new_state: general_enable
+
+
+confirm_abort_copy:
+  preface: |
+    %Warning: File not a valid executable for this system
+  prompt: "Abort Copy? [confirm]"
+  commands:
+    "n":
+      response: |
+        Loading somefile.bin from 127.0.0.1 (via GigabitEthernet0/0): !!
+        [OK - 5581609 bytes]
+      new_state: general_enable
+    "":
+      new_state: general_enable
+
+general_enable_reload_to_rommon:
+  prompt: "%N#"
+  commands:
+    <<: *gen_enable_cmds
+    "reload":
+      new_state: press_return

@@ -23,3 +23,8 @@ class IosXEStackSettings(IosXESettings):
         self.RELOAD_POSTCHECK_INTERVAL = 30
         # Timeout for boot
         self.STACK_BOOT_TIMEOUT = 1000
+
+        self.CONFIGURE_ALLOW_STATE_CHANGE = True
+        
+        # Secs to sleep after booting the device
+        self.STACK_ENABLE_SLEEP = 100

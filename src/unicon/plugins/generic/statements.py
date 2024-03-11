@@ -15,12 +15,14 @@ from datetime import datetime, timedelta
 from unicon.eal.dialogs import Statement
 from unicon.eal.helpers import sendline
 from unicon.core.errors import UniconAuthenticationError
+from unicon.core.errors import CredentialsExhaustedError
 from unicon.core.errors import ConnectionError as UniconConnectionError
 from unicon.utils import Utils
 
 from unicon.plugins.generic.patterns import GenericPatterns
 from unicon.plugins.utils import (
     get_current_credential,
+    _get_creds_to_try,
     common_cred_username_handler,
     common_cred_password_handler,
 )
@@ -44,6 +46,10 @@ def terminal_position_handler(spawn, session, context):
 def connection_refused_handler(spawn):
     """ handles connection refused scenarios
     """
+    if spawn.device:
+        spawn.device.api.execute_clear_line()
+        spawn.device.connect()
+        return
     raise Exception('Connection refused to device %s' % (str(spawn)))
 
 
@@ -255,7 +261,7 @@ def get_enable_credential_password(context):
         for cred_name, key in enable_pw_checks:
             if cred_name:
                 candidate_enable_pw = credentials.get(cred_name, {}).get(key)
-                if candidate_enable_pw:
+                if candidate_enable_pw is not None:
                     enable_credential_password = candidate_enable_pw
                     break
         else:
@@ -277,6 +283,84 @@ def enable_password_handler(spawn, context, session):
         spawn.sendline(enable_credential_password)
     else:
         spawn.sendline(context['enable_password'])
+
+def set_new_password(spawn, context, session):
+    '''setting up the new password on the device.
+
+        For setting up the password we need to do these 2 steps
+        to make sure we don't get CredentialsExhaustedError:
+            1- remove the current_credential(this is the last credential used for login into device)
+               from session.
+            2- remove the cred_iter(an iterable of login credentials) from session.
+        after removing these 2 we reset credentials and we could use the default password from the default credentials
+        for setting up the password on the device.
+    '''
+    # remove the current credential from session
+    if session.get('current_credential'):
+        session.pop('current_credential')
+    # remove the cred_iter from session
+    if session.get('cred_iter'):
+        session.pop('cred_iter')
+    # calling the password handler for sending the passowrd.
+    password_handler(spawn, context, session )
+
+
+def enable_secret_handler(spawn, context, session):
+    if 'password_attempts' not in session:
+        session['password_attempts'] = 1
+    else:
+        session['password_attempts'] += 1
+    if session.password_attempts > spawn.settings.PASSWORD_ATTEMPTS:
+        raise UniconAuthenticationError('Too many enable password retries')
+
+    enable_credential_password = get_enable_credential_password(context=context)
+    if enable_credential_password and len(enable_credential_password) >= \
+            spawn.settings.ENABLE_SECRET_MIN_LENGTH:
+        spawn.sendline(enable_credential_password)
+    else:
+        spawn.log.warning('Using enable secret from TEMP_ENABLE_SECRET setting')
+        enable_secret = spawn.settings.TEMP_ENABLE_SECRET
+        context['setup_selection'] = 0
+        spawn.sendline(enable_secret)
+
+
+def setup_enter_selection(spawn, context):
+    selection = context.get('setup_selection')
+    if selection is not None:
+        if str(selection) == '0':
+            spawn.log.warning('Not saving setup configuration')
+        spawn.sendline(f'{selection}')
+    else:
+        spawn.sendline('2')
+
+
+def enable_secret_handler(spawn, context, session):
+    if 'password_attempts' not in session:
+        session['password_attempts'] = 1
+    else:
+        session['password_attempts'] += 1
+    if session.password_attempts > spawn.settings.PASSWORD_ATTEMPTS:
+        raise UniconAuthenticationError('Too many enable password retries')
+
+    enable_credential_password = get_enable_credential_password(context=context)
+    if enable_credential_password and len(enable_credential_password) >= \
+            spawn.settings.ENABLE_SECRET_MIN_LENGTH:
+        spawn.sendline(enable_credential_password)
+    else:
+        spawn.log.warning('Using enable secret from TEMP_ENABLE_SECRET setting')
+        enable_secret = spawn.settings.TEMP_ENABLE_SECRET
+        context['setup_selection'] = 0
+        spawn.sendline(enable_secret)
+
+
+def setup_enter_selection(spawn, context):
+    selection = context.get('setup_selection')
+    if selection is not None:
+        if str(selection) == '0':
+            spawn.log.warning('Not saving setup configuration')
+        spawn.sendline(f'{selection}')
+    else:
+        spawn.sendline('2')
 
 
 def ssh_tacacs_handler(spawn, context):
@@ -336,10 +420,28 @@ def passphrase_handler(spawn, context, session):
                                         "for credential {}.".format(credential))
 
 
-def bad_password_handler(spawn):
+def bad_password_handler(spawn, context, session):
     """ handles bad password prompt
     """
-    raise UniconAuthenticationError('Bad Password sent to device %s' % (str(spawn),))
+    # check if there is a fallback credential
+    if context['fallback_creds']:
+        spawn.log.info('Using fallback credentials for logging in to the device!')
+        # Update the session with fallback credentials
+        if not session.get('fallback_creds'):
+            session['fallback_creds'] = iter(context['fallback_creds'])
+            # this list keep track of the fallback credentials being used
+            session['cred_list'] = []
+        try:
+            # update the current credential with the next fallback credential
+            session['current_credential'] = next(session['fallback_creds'])
+            spawn.log.info(f"Using {session['current_credential']} from fallback credential list.")
+            # update the list of fallback credentials
+            session['cred_list'].append(session['current_credential'])
+        except StopIteration:
+            raise CredentialsExhaustedError(
+                creds_tried= _get_creds_to_try(context) + (session['cred_list']))
+    else:
+        raise UniconAuthenticationError('Bad Password sent to device %s' % (str(spawn),))
 
 
 def incorrect_login_handler(spawn, context, session):
@@ -389,11 +491,11 @@ def sudo_password_handler(spawn, context, session):
         raise UniconAuthenticationError("No credentials has been defined for sudo.")
 
 
-def wait_and_enter(spawn):
-    # wait for 0.5 second and read the buffer
+def wait_and_enter(spawn, wait=0.5):
+    # wait and read the buffer
     # this avoids issues where the 'sendline'
     # is somehow lost
-    wait_time = timedelta(seconds=0.5)
+    wait_time = timedelta(seconds=wait)
     settle_time = current_time = datetime.now()
     while (current_time - settle_time) < wait_time:
         spawn.read_update_buffer()
@@ -433,6 +535,34 @@ def update_context(spawn, context, session, **kwargs):
     context.update(kwargs)
 
 
+def boot_timeout_handler(spawn, context, session):
+    '''Special handler for dialog timeouts that occur during boot.
+    Based on start_boot_time set in the rommon->disable
+    transition handler, determine if boot is taking too
+    long and raise an exception.
+    '''
+    boot_timeout_time = timedelta(seconds=spawn.settings.BOOT_TIMEOUT)
+    boot_start_time = context.get('boot_start_time')
+    if boot_start_time:
+        current_time = datetime.now()
+        delta_time = current_time - boot_start_time
+        if delta_time > boot_timeout_time:
+            context.pop('boot_start_time', None)
+            raise TimeoutError('Boot timeout')
+        return True
+    else:
+        return False
+
+
+boot_timeout_stmt = Statement(
+    pattern='__timeout__',
+    action=boot_timeout_handler,
+    args=None,
+    loop_continue=True,
+    continue_timer=False)
+
+
+
 #############################################################
 #  Generic statements
 #############################################################
@@ -466,7 +596,7 @@ class GenericStatements():
         self.bad_password_stmt = Statement(pattern=pat.bad_passwords,
                                            action=bad_password_handler,
                                            args=None,
-                                           loop_continue=False,
+                                           loop_continue=True,
                                            continue_timer=False)
 
         self.login_incorrect = Statement(pattern=pat.login_incorrect,
@@ -495,13 +625,18 @@ class GenericStatements():
                                        args=None,
                                        loop_continue=True,
                                        continue_timer=False)
+        self.new_password_stmt = Statement(pattern=pat.new_password,
+                                           action=set_new_password,
+                                           args=None,
+                                           loop_continue=True,
+                                           continue_timer=False)
         self.enable_password_stmt = Statement(pattern=pat.password,
                                               action=enable_password_handler,
                                               args=None,
                                               loop_continue=True,
                                               continue_timer=False)
         self.enable_secret_stmt = Statement(pattern=pat.enable_secret,
-                                            action=enable_password_handler,
+                                            action=enable_secret_handler,
                                             args=None,
                                             loop_continue=True,
                                             continue_timer=False)
@@ -600,7 +735,7 @@ class GenericStatements():
                                               continue_timer=False)
 
         self.enter_your_selection_stmt = Statement(pattern=pat.enter_your_selection_2,
-                                                   action='sendline(2)',
+                                                   action=setup_enter_selection,
                                                    args=None,
                                                    loop_continue=True,
                                                    continue_timer=True)
@@ -654,6 +789,7 @@ authentication_statement_list = [generic_statements.bad_password_stmt,
                                  generic_statements.login_incorrect,
                                  generic_statements.login_stmt,
                                  generic_statements.useraccess_stmt,
+                                 generic_statements.new_password_stmt,
                                  generic_statements.password_stmt,
                                  generic_statements.clear_kerberos_no_realm,
                                  generic_statements.password_ok_stmt,
@@ -670,13 +806,15 @@ initial_statement_list = [generic_statements.init_conf_stmt,
                           generic_statements.enter_your_selection_stmt
                           ]
 
-connection_statement_list = \
-    authentication_statement_list + \
-    initial_statement_list + \
-    pre_connection_statement_list
 
 ############################################################
 # Default pattern Statement
 #############################################################
 
 default_statement_list = [generic_statements.more_prompt_stmt]
+
+connection_statement_list = \
+    default_statement_list + \
+    authentication_statement_list + \
+    initial_statement_list + \
+    pre_connection_statement_list

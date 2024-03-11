@@ -18,12 +18,13 @@ from unicon.plugins.generic.service_implementation import (
     Copy as GenericCopy,
     ResetStandbyRP as GenericResetStandbyRP,
     Reload as GenericReload,
-    Enable as GenericEnable)
+    Enable as GenericEnable,
+    ContextMgrBaseService)
 
 
 from .service_statements import execute_statement_list, configure_statement_list, confirm
 
-from .statements import grub_prompt_stmt
+from .statements import grub_prompt_stmt, boot_from_rommon_stmt
 
 from unicon.plugins.generic.utils import GenericUtils
 from unicon.plugins.generic.service_implementation import BashService as GenericBashService
@@ -160,6 +161,10 @@ class BashService(GenericBashService):
             handle.context['_rp'] = kwargs.get('rp')
         else:
             handle.context.pop('_rp', None)
+        if kwargs.get('chassis'):
+            handle.context['_chassis'] = kwargs.get('chassis')
+        else:
+            handle.context.pop('_chassis', None)
         super().pre_service(*args, **kwargs)
 
     class ContextMgr(GenericBashService.ContextMgr):
@@ -232,7 +237,7 @@ class Reload(GenericReload):
     def __init__(self, connection, context, **kwargs):
         super().__init__(connection, context, **kwargs)
         # Add the grub prompt statement
-        self.dialog += Dialog([grub_prompt_stmt])
+        self.dialog += Dialog([grub_prompt_stmt, boot_from_rommon_stmt])
 
     def pre_service(self, *args, **kwargs):
         self.prompt_recovery = self.connection.prompt_recovery
@@ -251,6 +256,7 @@ class Reload(GenericReload):
                      return_output=False,
                      reload_creds=None,
                      grub_boot_image=None,
+                     post_reload_wait_time=None,
                      *args, **kwargs):
         sm = self.get_sm()
 
@@ -271,6 +277,7 @@ class Reload(GenericReload):
             timeout=timeout,
             return_output=return_output,
             reload_creds=reload_creds,
+            post_reload_wait_time=post_reload_wait_time,
             *args, **kwargs)
 
         self.context.pop("image_to_boot", None)
@@ -365,4 +372,15 @@ class Tclsh(Execute):
         self.start_state = 'tclsh'
         self.end_state = 'tclsh'
         self.service_name = 'tclsh'
+        self.__dict__.update(kwargs)
+
+class MaintenanceMode(ContextMgrBaseService):
+
+    def __init__(self, connection, context, **kwargs):
+        super().__init__(connection, context, **kwargs)
+        self.context_state = 'maintenance'
+        self.service_name = 'maintenance'
+        self.start_state = "enable"
+        self.end_state = "enable"
+
         self.__dict__.update(kwargs)

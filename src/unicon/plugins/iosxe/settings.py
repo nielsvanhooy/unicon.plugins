@@ -20,24 +20,31 @@ class IosXESettings(GenericSettings):
             r'% Unknown command or computer name, or unable to find computer address'
         ]
         self.CONFIGURE_ERROR_PATTERN = [
-            r'^%\s*[Ii]nvalid (command|input|number)',
-            r'routing table \S+ does not exist'
+            r'^%\s*[Ii]nvalid (command|input|number|address)',
+            r'routing table \S+ does not exist',
+            r'^%\s*SR feature is not configured yet, please enable Segment-routing first.',
+            r'^%\s*\S+ overlaps with \S+',
+            r'^%\S+ is linked to a VRF. Enable \S+ on that VRF first.',
+            r'% VRF \S+ not configured',
+            r'% Incomplete command.',
+            r'%CLNS: System ID (\S+) must not change when defining additional area addresses',
+            r'% Specify remote-as or peer-group commands first',
+            r'% Policy commands not allowed without an address family',
+            r'% Color set already. Deconfigure first',
+            r'Invalid policy name, \S+ does not exist',
+            r'% Deletion of RD in progress; wait for it to complete'
         ]
 
         self.EXECUTE_MATCHED_RETRIES = 1
         self.EXECUTE_MATCHED_RETRY_SLEEP = 0.1
 
+        self.RELOAD_WAIT = 300
+
         self.CONFIG_LOCK_RETRY_SLEEP = 30
         self.CONFIG_LOCK_RETRIES = 10
 
-        self.BOOT_TIMEOUT = 600
         self.POST_BOOT_TIMEOUT = 300
         self.BOOT_POSTCHECK_INTERVAL = 30
-
-        self.FIND_BOOT_IMAGE = True
-        self.MAX_BOOT_ATTEMPTS = 3
-        self.BOOT_FILESYSTEM = 'bootflash:'
-        self.BOOT_FILE_REGEX = r'(\S+\.bin)'
 
         self.SERVICE_PROMPT_CONFIG_CMD = 'service prompt config'
         self.CONFIG_PROMPT_WAIT = 2
@@ -49,7 +56,10 @@ class IosXESettings(GenericSettings):
         self.GUESTSHELL_ENABLE_VERIFY_CMDS = []
         self.GUESTSHELL_ENABLE_VERIFY_PATTERN = r''
 
-        self.ROMMON_INIT_COMMANDS = []
-
         # Regex to match the entries on the grub boot screen
         self.GRUB_REGEX_PATTERN = r'(?:\x1b\[7m)?\x1b\[\d;3H.*?   '
+
+        self.MAINTENANCE_MODE_WAIT_TIME = 30   # 30 seconds
+        self.MAINTENANCE_MODE_TIMEOUT = 60*40  # 40 minutes
+        self.MAINTENANCE_START_COMMAND = 'start maintenance'
+        self.MAINTENANCE_STOP_COMMAND = 'stop maintenance'

@@ -107,10 +107,119 @@ in the testbed YAML connection block:
 .. _settings_control:
 
 A connection, once created, has a ``settings`` parameter whose contents and
-defaults are plugin-dependent.  It is possible to override these settings
-from the testbed YAML file via the ``settings`` key.
+defaults are plugin-dependent.  It is possible to override these settings in the
+testbed YAML file via the ``settings`` key or by setting the values of the
+connection object `settings` attribute.
 
-Settings can be accessed :ref:`here<controlled_settings>`.
+.. _controlled_settings:
+
+**Backend implementation**
+
+Unicon uses `telnetlib` for telnet connection and `ssh` unix client for telnet
+and SSH connections respectively. This was changed from release 23.6 onwards.
+Previous release would use `telnet` unix client by default. To switch to the
+unix telnet client instead of using telnetlib, set the ``BACKEND`` setting to
+`unicon.eal.backend.pty_backend` in the testbed yaml file.
+
+.. code-block:: yaml
+
+    devices:
+        <name>:
+            connections:
+                <name>:
+                    settings:
+                        BACKEND: unicon.eal.backend.pty_backend  # default is "auto"
+
+
+**Error pattern handling**
+
+If you want to execute services that could fail to execute properly and you want to verify
+this automatically using a specific error pattern, you can specify the `error_pattern`
+option with a list of regular expressions to match on the output. This option is available
+for the execute service.
+
+The regex pattern is matched using the python multiline option (re.M) so you can use
+the start of line (`^`) character to match specific line output.
+
+.. code-block:: python
+
+    >>> c.execute('show interface invalid', error_pattern=['^% Invalid'])
+
+If you want to avoid errors being detected with any command, you can set the settings object
+`ERROR_PATTERN` to an empty list. The current generic default is an empty list.
+
+.. code-block:: python
+
+    >>> from pyats.topology import loader
+    >>>
+    >>> tb = loader.load('testbed.yaml')
+    >>> ncs = tb.devices.ncs
+    >>>
+    >>> ncs.connect(via='cli')
+    >>> ncs.settings.ERROR_PATTERN=[]
+
+The default error patterns can be seen by printing the settings.ERROR_PATTERN attribute.
+
+.. code-block:: python
+
+    >>> ncs.settings.ERROR_PATTERN
+    ['Error:', 'syntax error', 'Aborted', 'result false']
+
+Alternatively, you can pass an empty list when executing a command to avoid error pattern checking.
+
+.. code-block:: python
+
+    >>> c.execute('show command error', error_pattern=[])
+
+You can also append a pattern to the existing patterns defined in the settings when executing a command
+(e.g. to add an error pattern for a specific command to execute).
+
+.. code-block:: python
+
+    >>> c.execute('show command error', append_error_pattern=['^specific error pattern'])
+
+**Environment variables**
+
+If you want to set environment variables for the connection, you can set them
+by adding key-value pairs to the `ENV` dictionary.
+
+.. code-block:: python
+
+    >>> uut.settings.ENV = {'MYENV': 'mystring'}
+
+**Terminal size settings**
+
+To set the terminal size (rows, cols) you can use the `ROWS` and `COLUMNS`
+environment variables. The default terminal size is 24 x 80. Some plugins
+like linux and nxos/aci have their own defaults.
+
+.. code-block:: python
+
+    >>> uut.settings.ENV = {'ROWS': 200, 'COLUMNS': 200}
+
+**Printing matched patterns**
+
+If you want to print the dialog statements matched patterns during the run,
+you need to set the log level to logging.DEBUG or connect with debug=True.
+
+Default value is False.
+
+.. code-block:: python
+
+    >>> from pyats.topology import loader
+    >>>
+    >>> tb = loader.load('testbed.yaml')
+    >>> uut = tb.devices['uut']
+    >>>
+    >>> uut.connect()
+    >>> uut.log.setLevel(logging.DEBUG)
+
+Alternative:
+
+    >>> uut.connect(debug=True)
+
+
+**Service attributes**
 
 A connection is assigned a plugin-dependent list of services when it is created.
 It is possible to override any service attribute from the testbed YAML file
@@ -189,6 +298,26 @@ you can set the ``EXEC_TIMEOUT`` and ``CONFIG_TIMEOUT`` in the testbed file:
           settings:
             EXEC_TIMEOUT: 120
             CONFIG_TIMEOUT: 120
+
+
+**EOF Exception handling**
+
+If device connection is closed/terminated unexpectedly during service calling, we can reconnect
+to device. EOF exception is raised by Spawn when connection is not available.
+
+Sample usage:
+
+.. code-block:: python
+
+    from unicon.core.errors import EOF, SubCommandFailure
+    try:
+      d.execute(cmd) # or any service call.
+    except SubCommandFailure as e:
+      if isinstance(e.__cause__, EOF):
+        print('Connection closed, try reconnect')
+        d.disconnect()
+        d.connect()
+
 
 
 Example: Single NXOS
@@ -815,6 +944,13 @@ Arguments:
     * **log_stdout**: Boolean option to enable/disable logging to standard output. Default is True.
       *(Optional)*
 
+    * **log_propagate**: Boolean option to enable/disable propagating logs from connection logger
+      to parent logger (e.g. whether logs for `unicon.N7K-BESTPROD2-SSR-P1.cli.1663541251` logger
+      should propagate to `unicon` logger). Default is False. *(Optional)*
+
+    * **no_pyats_tasklog**: Boolean option to enable/disable logging to pyats tasklog. Default is False.
+      *(Optional)*
+
     * **debug**: Boolean option to enable/disable internal debug logging.
       *(Optional)*
 
@@ -983,156 +1119,6 @@ the ``service_attributes`` parameter.
     123
     dev.ping.timeout
     456
-
-
-.. _unicon_credentials:
-
-Credentials
------------
-
-The ``credentials`` connection parameter defines a dictionary of named
-credentials.  A credential is a dictionary typically containing both
-``username`` and ``password`` keys.
-
-The ``login_creds`` connection parameter defines an optional sequence of
-credential names to try.  Each time the device prompts for a username or
-password, the current credential is set to the next credential in the sequence
-if a current credential has not already been set.
-When a password is sent, the current credential is unset.  The one exception
-is when entering an administrator's password on a routing device coming up
-without configuration, in this case the current credential is reused.
-If the sequence has been exhausted and no more credentials are available to
-satisfy a username/password prompt, a
-`CredentialsExhaustedError<unicon.core.errors.CredentialsExhaustedError>` is
-raised.
-
-Credentials are not retried, any username or password failure causes a
-`UniconAuthenticationError<unicon.core.errors.UniconAuthenticationError>`
-to be raised.
-
-It is possible to specify the password to use for routing devices to enter
-enable mode.  This may be done via the ``enable_password`` entry under the
-current credential, or via a separate credential called ``enable``.
-Please see :ref:`unicon_enable_password_handling` for details.
-
-Passwords specified as a :ref:`secret_strings` are automatically decoded prior
-to being sent to the device.
-
-In pyATS Testbed YAML
-"""""""""""""""""""""
-
-Credentials may be specified on a per-testbed, per-device or per-connection
-basis, as documented in :ref:`topology_credential_password_modeling`.
-
-
-.. code-block:: python
-
-    from pyats.topology import loader
-    tb = loader.load("""
-        devices:
-            my_device:
-                type: router
-                credentials:
-                    default:
-                        username: admin
-                        password: Cisc0123
-                    alternate:
-                        username: alt_username
-                        password: alt_password
-                    termserv:
-                        username: tsuser
-                        password: tspw
-                    enable:
-                        password: enablepw
-                connections:
-                    defaults: {class: 'unicon.Unicon'}
-                    a:
-                      protocol: ssh
-                      ip: 10.64.70.11
-                      port: 2042
-                      login_creds: [termserv, default]
-                      ssh_options: "-v -i /path/to/identityfile"
-
-    """)
-    dev = tb.devices.my_device
-    dev.connect()
-
-    # To connect using different credentials than is contained in the
-    # testbed YAML ``login_creds`` key:
-    dev.destroy()
-    dev.connect(login_creds=['termserv', 'alternate'])
-
-
-In Python
-"""""""""
-
-.. code-block:: python
-
-    dev = Connnection(hostname=uut_hostname,
-                       start=[uut_start_cmd],
-                       credentials={\
-                           {'default': {'username': 'admin', 'password': 'Cisc0123'}},\
-                           {'enable': {'password': 'enablepw'}},\
-                           {'termserv': {'username': 'tsuser', 'password': 'tspw'}},\
-                       },
-                       login_creds = ['termserv', 'default'],
-                     )
-
-
-Post credential action
-""""""""""""""""""""""
-
-In certain cases, e.g. when using a serial console server, an action is needed to get a response
-from the device connected to the serial port. There are two ways to configure this action.
-The first one is using a setting, the second one is using a post credential action.
-The post credential action takes precedence over the setting.
-
-Example credentials for a device.
-
-.. code-block:: yaml
-
-      my_device:
-          type: router
-          credentials:
-              default:
-                  username: admin
-                  password: Cisc0123
-              terminal_server:
-                  username: tsuser
-                  password: tspw
-
-
-Setting the credential action via `settings` in python.
-
-.. code-block:: python
-
-    # Name of the credential after which a "sendline()" should be executed
-    dev.settings.SENDLINE_AFTER_CRED = 'terminal_server'
-
-
-Settings can also be specified for the connection in the topology file as shown below.
-
-.. code-block:: yaml
-
-    connections:
-      cli:
-        settings:
-          SENDLINE_AFTER_CRED: terminal_server
-
-
-The post credential action supports ``send`` and ``sendline``, you can specify a string to be sent,
-e.g. `send( )` to send a space or `send(\\x03)` to send Ctrl-C. Quotes should not be specified.
-
-.. code-block:: yaml
-
-    connections:
-      cli:
-        login_creds: [terminal_server, default]
-        arguments:
-          cred_action:
-            terminal_server:
-              post: sendline()
-
 
 
 Logging
@@ -1558,10 +1544,10 @@ To make use of this feature, you can choose from the following actions:
             arguments:
               learn_tokens: True
 
-By default, token discovery will not overwrite tokens that you have already defined in your testbed file. 
+By default, token discovery will not overwrite tokens that you have already defined in your testbed file.
 It will only assign discovered tokens to the device object if the token does not yet exist or if the value is generic. For example: `platform: generic`.
 
-You can override this behavior if you'd like. Using the `overwrite_testbed_tokens` flag will cause any discovered token to be assigned to the device object regardless of what has been defined in the testbed. 
+You can override this behavior if you'd like. Using the `overwrite_testbed_tokens` flag will cause any discovered token to be assigned to the device object regardless of what has been defined in the testbed.
 This flag can be set in the same way as `learn_tokens`:
 
 1. Set the `overwrite_testbed_tokens` argument to True when calling `device.connect`
