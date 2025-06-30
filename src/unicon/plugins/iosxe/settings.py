@@ -12,6 +12,8 @@ class IosXESettings(GenericSettings):
         # A single cycle of retries wasn't enough to recover an iosxe device
         # just rebooted after a "write erase".
         self.PROMPT_RECOVERY_RETRIES = 2
+        self.PROMPT_RECOVERY_COMMANDS = ['\r', '\x1e', '\x03']
+
         self.ERROR_PATTERN = [
             r'^%\s*[Ii]nvalid (command|input)',
             r'^%\s*[Ii]ncomplete (command|input)',
@@ -24,6 +26,7 @@ class IosXESettings(GenericSettings):
             r'routing table \S+ does not exist',
             r'^%\s*SR feature is not configured yet, please enable Segment-routing first.',
             r'^%\s*\S+ overlaps with \S+',
+            r'^\S+ / \S+ is an [Ii]nvalid network\.',
             r'^%\S+ is linked to a VRF. Enable \S+ on that VRF first.',
             r'% VRF \S+ not configured',
             r'% Incomplete command.',
@@ -32,13 +35,18 @@ class IosXESettings(GenericSettings):
             r'% Policy commands not allowed without an address family',
             r'% Color set already. Deconfigure first',
             r'Invalid policy name, \S+ does not exist',
-            r'% Deletion of RD in progress; wait for it to complete'
+            r'% Deletion of RD in progress; wait for it to complete',
+            r'% VLAN \[\d+\] already in use',
+            r'% VNI \d+ is either already in use or exceeds the maximum allowable VNIs.'
         ]
 
         self.EXECUTE_MATCHED_RETRIES = 1
         self.EXECUTE_MATCHED_RETRY_SLEEP = 0.1
 
         self.RELOAD_WAIT = 300
+
+        # wait time for buffer to settle down
+        self.CONTROLLER_MODE_CHATTY_WAIT_TIME = 5
 
         self.CONFIG_LOCK_RETRY_SLEEP = 30
         self.CONFIG_LOCK_RETRIES = 10

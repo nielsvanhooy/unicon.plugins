@@ -53,6 +53,8 @@ def login_handler(spawn, context, session):
     """
     credential = get_current_credential(context=context, session=session)
     if credential:
+        if credential != 'default':
+            spawn.log.info(f'Using {credential} credential set for login into device')
         common_cred_username_handler(
             spawn=spawn, context=context, credential=credential)
     else:
@@ -166,6 +168,11 @@ def copy_handler_1(spawn, context, send_key):
     else:
         raise SubCommandFailure("%s is not specified" % context[send_key])
 
+def copy_overwrite_handler(spawn, context):
+    if context['overwrite'] == 'False':
+        spawn.sendline('n')
+    else:
+        spawn.sendline('y')
 
 def copy_error_handler(context, retry=False):
     if retry:
@@ -354,7 +361,8 @@ reload_statement_list = [save_env, confirm_reset, reload_confirm,
                          generic_statements.syslog_msg_stmt,
                          # Below statements have loop_continue=False
                          password_stmt, press_enter, press_return,
-                         connection_closed_stmt, eof_statement
+                         connection_closed_stmt, eof_statement,
+                         generic_statements.enter_your_encryption_selection_stmt
                          ]
 
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
@@ -960,8 +968,8 @@ rcp_confirm = Statement(pattern=pat.rcp_confirm,
                         continue_timer=True)
 # Recheck this
 copy_overwrite = Statement(pattern=pat.copy_overwrite,
-                           action=send_response,
-                           args={'response': 'y'},
+                           action=copy_overwrite_handler,
+                           args=None,
                            loop_continue=True,
                            continue_timer=True)
 

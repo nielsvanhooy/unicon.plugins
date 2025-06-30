@@ -8,6 +8,7 @@ Uses the unicon.plugins.tests.mock.mock_device_ios script to test IOSXE plugin.
 __author__ = "Myles Dear <mdear@cisco.com>"
 
 import re
+import os 
 import time
 import unittest
 from unittest.mock import patch
@@ -33,16 +34,82 @@ class TestIosXEPluginConnect(unittest.TestCase):
                 os='iosxe',
                 credentials=dict(default=dict(username='cisco', password='cisco')),
                 log_buffer=True)
-        c.connect()
-        self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        try:
+            c.connect()
+            self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        finally:
+            c.disconnect()
+
+    def test_isr_controller_mode_connect(self):
+        testbed = '''
+            devices:
+                Router:
+                    type: router
+                    os: iosxe
+                    platform: isr
+                    credentials:
+                        default:
+                            username: cisco
+                            password: cisco
+                    connections:
+                        defaults:
+                            class: 'unicon.Unicon'
+                        cli:
+                            command: mock_device_cli --os iosxe --state isr_exec_1 --hostname Router
+        '''
+        t = loader.load(testbed)
+        d = t.devices.Router
+        try:
+            d.connect()
+        finally:
+            d.disconnect()
+        self.assertEqual(d.os, 'iosxe')
+        self.assertEqual(d.version, '17.14')
+        self.assertEqual(d.platform, 'sdwan')
+        self.assertEqual(d.model, 'isr4200')
+        self.assertEqual(d.pid, 'ISR4221/K9')
+
+
+    def test_isr_controller_mode_connect(self):
+        testbed = '''
+            devices:
+                Router:
+                    type: router
+                    os: iosxe
+                    platform: isr
+                    credentials:
+                        default:
+                            username: cisco
+                            password: cisco
+                    connections:
+                        defaults:
+                            class: 'unicon.Unicon'
+                        cli:
+                            command: mock_device_cli --os iosxe --state isr_exec_1 --hostname Router
+        '''
+        t = loader.load(testbed)
+        d = t.devices.Router
+        try:
+            d.connect()
+        finally:
+            d.disconnect()
+        self.assertEqual(d.os, 'iosxe')
+        self.assertEqual(d.version, '17.14')
+        self.assertEqual(d.platform, 'sdwan')
+        self.assertEqual(d.model, 'isr4200')
+        self.assertEqual(d.pid, 'ISR4221/K9')
+
 
     def test_isr_login_connect(self):
         c = Connection(hostname='Router',
                        start=['mock_device_cli --os iosxe --state isr_login --hostname Router'],
                        os='iosxe',
                        credentials=dict(default=dict(username='cisco', password='cisco')))
-        c.connect()
-        self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        try:
+            c.connect()
+            self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        finally:
+            c.disconnect()
 
     def test_edison_login_connect(self):
         c = Connection(hostname='Router',
@@ -50,8 +117,11 @@ class TestIosXEPluginConnect(unittest.TestCase):
                        os='iosxe',
                        platform='cat3k',
                        credentials=dict(default=dict(username='cisco', password='cisco')))
-        c.connect()
-        self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        try:
+            c.connect()
+            self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        finally:
+            c.disconnect()
 
     def test_edison_login_connect_password_ok(self):
         c = Connection(hostname='Router',
@@ -59,31 +129,44 @@ class TestIosXEPluginConnect(unittest.TestCase):
                        os='iosxe',
                        platform='cat3k',
                        credentials=dict(default=dict(username='cisco', password='cisco')))
-        c.connect()
-        self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        try:
+            c.connect()
+            self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        finally:
+            c.disconnect()
 
     def test_general_login_connect(self):
         c = Connection(hostname='Router',
                        start=['mock_device_cli --os iosxe --state general_login --hostname Router'],
                        os='iosxe',
                        credentials=dict(default=dict(username='cisco', password='cisco')))
-        c.connect()
-        self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        try:
+            c.connect()
+            self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        finally:
+            c.disconnect()
 
     def test_general_login_connect_syslog(self):
         c = Connection(hostname='Router',
                        start=['mock_device_cli --os iosxe --state connect_syslog --hostname Router'],
                        os='iosxe',
                        credentials=dict(default=dict(username='cisco', password='cisco')))
-        c.connect()
-        self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        try:
+            c.connect()
+            self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        finally:
+            c.disconnect()
 
     def test_general_configure(self):
         c = Connection(hostname='Router',
                        start=['mock_device_cli --os iosxe --state general_login --hostname Router'],
                        os='iosxe',
                        credentials=dict(default=dict(username='cisco', password='cisco')))
-        c.connect()
+        try:
+            c.connect()
+        finally:
+            c.disconnect()
+
         cmd = ['crypto key generate rsa general-keys modulus 2048 label ca',
                'crypto pki server ca', 'grant auto', 'hash sha256', 'lifetime ca-certificate 3650',
                'lifetime certificate 3650', 'database archive pkcs12 password 0 cisco123', 'no shutdown']
@@ -95,25 +178,44 @@ class TestIosXEPluginConnect(unittest.TestCase):
                        start=['mock_device_cli --os iosxe --state general_login --hostname Router'],
                        os='iosxe',
                        credentials=dict(default=dict(username='cisco', password='cisco')))
-        c.connect()
-        c.configure("crypto pki profile enrollment test", timeout=60)
-        self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+
+        try:
+            c.connect()
+            c.configure("crypto pki profile enrollment test", timeout=60)
+            self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        finally:
+            c.disconnect()
+
+    def test_general_config_ca_cert_map(self):
+        c = Connection(hostname='Router',
+                       start=['mock_device_cli --os iosxe --state general_config_certificate_map --hostname Router'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='cisco', password='cisco')))
+
+        try:
+            c.connect()
+            self.assertEqual(c.state_machine.current_state, 'enable')
+        finally:
+            c.disconnect()
 
     def test_gkm_local_server(self):
         c = Connection(hostname='Router',
                        start=['mock_device_cli --os iosxe --state general_login --hostname Router'],
                        os='iosxe',
                        credentials=dict(default=dict(username='cisco', password='cisco')))
-        c.connect()
-        cmd = [
-            "crypto gkm group g1",
-            "identity number 101",
-            "server local",
-            "end",
-            "end"
-        ]
-        c.configure(cmd, timeout=60)
-        self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        try:
+            c.connect()
+            cmd = [
+                "crypto gkm group g1",
+                "identity number 101",
+                "server local",
+                "end",
+                "end"
+            ]
+            c.configure(cmd, timeout=60)
+            self.assertEqual(c.spawn.match.match_output, 'end\r\nRouter#')
+        finally:
+            c.disconnect()
 
     def test_login_console_server_sendline_after(self):
         md = MockDeviceTcpWrapperIOSXE(port=0, state='ts_login')
@@ -154,6 +256,67 @@ class TestIosXEPluginConnect(unittest.TestCase):
         finally:
             c.disconnect()
             md.stop()
+
+    def test_connect_learn_os_version(self):
+        md = MockDeviceTcpWrapperIOSXE(port=0, state='ewc_enable', hostname='EWC')
+        md.start()
+
+        testbed = """
+        devices:
+          EWC:
+            os: iosxe
+            type: cat9k
+            credentials:
+                default:
+                    username: admin
+                    password: cisco
+                set1:
+                    username: cisco
+                    password: cisco
+            connections:
+              defaults:
+                class: unicon.Unicon
+                fallback_credentials:
+                    - set1
+              a:
+                protocol: telnet
+                ip: 127.0.0.1
+                port: {}
+        """.format(md.ports[0])
+
+        tb = loader.load(testbed)
+        device = tb.devices.EWC
+        try:
+            os.environ.pop('LEARN_OS_VERSION',None)  
+            device.connect(learn_hostname=True)
+            self.assertEqual(device.version, '17.06.01.0.129467')
+            self.assertEqual(device.state_machine.current_state, 'enable')
+            os.environ['LEARN_OS_VERSION'] = 'False'
+        finally:
+            device.disconnect()
+            md.stop()
+
+    def test_operating_mode_check(self):
+        c = Connection(hostname='Router',
+                       start=['mock_device_cli --os iosxe --state general_enable_no_operating_mode --hostname Router'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='cisco', password='cisco')))
+        try:
+            c.connect()
+        finally:
+            c.disconnect()
+
+    def test_unlicensed_prompt(self):
+        c = Connection(hostname='UUT',
+                       start=['mock_device_cli --os iosxe --state unlicensed_prompt --hostname UUT'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='cisco', password='cisco')),
+                       mit=True)
+        try:
+            c.connect()
+            self.assertEqual(c.spawn.match.last_match.group(2), '(unlicensed)')
+        finally:
+            c.disconnect()
 
 
 class TestIosXEPluginExecute(unittest.TestCase):
@@ -235,6 +398,18 @@ class TestIosXEPluginDisableEnable(unittest.TestCase):
                        log_buffer=True
                        )
         c.connect()
+        c.disconnect()
+
+    def test_disable_to_enable_no_passwd(self):
+        c = Connection(
+            hostname='Router',
+            start=['mock_device_cli --os iosxe --state disable_to_enable_no_passwd'],
+            os='iosxe',
+            credentials=dict(default=dict(password='cisco')),
+            log_buffer=True
+        )
+        with self.assertRaisesRegex(UniconAuthenticationError, "No password set on this device"):
+            c.connect()
         c.disconnect()
 
 
@@ -430,6 +605,79 @@ class TestIosXEluginBashService(unittest.TestCase):
         self.assertIn('WLC1#', c.spawn.match.match_output)
         c.disconnect()
 
+    def test_bash_disable_selinux(self):
+        c = Connection(hostname='Router',
+                       start=['mock_device_cli --os iosxe --state general_enable --hostname Router'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='cisco', password='cisco')),
+                       log_buffer=True
+                       )
+        with c.bash_console(disable_selinux=True) as console:
+            self.assertIn('[Router_RP_0:/]$', c.spawn.match.match_output)
+            console.execute('df /bootflash/')
+        self.assertIn('set platform software selinux default', c.spawn.match.match_output)
+        self.assertIn('Router#', c.spawn.match.match_output)
+        c.disconnect()
+
+    def test_bash_disable_selinux_invalid_cmds(self):
+        c = Connection(hostname='Router',
+                       start=['mock_device_cli --os iosxe --state enable_isr --hostname Router'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='cisco', password='cisco')),
+                       log_buffer=True
+                       )
+        with c.bash_console(disable_selinux=True) as console:
+            self.assertIn('[Router:/]$', c.spawn.match.match_output)
+            console.execute('ls')
+        self.assertIn('set platform software selinux default', c.spawn.match.match_output)
+        self.assertIn('Router#', c.spawn.match.match_output)
+        c.disconnect()
+
+    def test_bash_parse(self):
+        testbed = '''
+            devices:
+                R1:
+                    os: iosxe
+                    connections:
+                        defaults:
+                            class: 'unicon.Unicon'
+                        cli:
+                            command: mock_device_cli --os iosxe --state general_enable --hostname R1
+        '''
+        tb = loader.load(testbed)
+        dev = tb.devices.R1
+        try:
+            dev.connect(mit=True, log_buffer=True)
+            with dev.bash_console() as console:
+                output = console.parse('ls -l')
+            expected_output = {
+                'files': {'bin': {'day': 10,
+                    'filename': 'bin',
+                    'group': 'root',
+                    'linked_filename': 'usr/bin',
+                    'links': 1,
+                    'mode': 'lrwxrwxrwx.',
+                    'month': 'Sep',
+                    'size': 7,
+                    'user': 'root',
+                    'year': 2024},
+                'boot': {'day': 9,
+                        'filename': 'boot',
+                        'group': 'root',
+                        'hour': 20,
+                        'links': 2,
+                        'minute': 41,
+                        'mode': 'drwxr-xr-x.',
+                        'month': 'Jan',
+                        'size': 60,
+                        'user': 'root'}},
+                'total': 55000
+            }
+            self.assertEqual(output, expected_output)
+        finally:
+            dev.disconnect()
+
+
 class TestIosXESDWANConfigure(unittest.TestCase):
 
     def test_config_transaction(self):
@@ -469,6 +717,15 @@ class TestIosXESDWANConfigure(unittest.TestCase):
         d.configure('no logging console')
         d.disconnect()
 
+class TestIosXEC8KVPlugin(unittest.TestCase):
+    def test_connect(self):
+        d = Connection(hostname="switch",
+                       start=["mock_device_cli --os iosxe --state c8kv_rommon --hostname switch"],
+                       os="iosxe",
+                       platform="cat8k",
+                       log_buffer=True)
+        d.connect()
+        d.disconnect()
 
 class TestIosXEC8KvPluginReload(unittest.TestCase):
     @classmethod
@@ -493,6 +750,9 @@ class TestIosXEC8KvPluginReload(unittest.TestCase):
     def test_reload(self):
         self.c.settings.POST_RELOAD_WAIT = 1
         self.c.reload(grub_boot_image='GOLDEN')
+
+    def test_rommon(self):
+        self.c.rommon(config_register="0x40")
 
 class TestIosXECat9kPluginReload(unittest.TestCase):
 
@@ -725,6 +985,21 @@ class TestIosXEConfigure(unittest.TestCase):
         c.configure(['no logging console'])
         c.disconnect()
 
+    def test_slow_config_mode2(self):
+        c = Connection(hostname='Switch',
+                       start=['mock_device_cli --os iosxe --state slow_config_mode2 --hostname Switch'],
+                       os='iosxe',
+                       mit=True,
+                       init_exec_commands=[],
+                       init_config_commands=[],
+                       log_buffer=True,
+                       settings=dict(CONFIG_TIMEOUT=10),
+                       debug=True
+                       )
+        c.connect()
+        c.configure(['no logging console'])
+        c.disconnect()
+
     def test_slow_config_lock(self):
         md = MockDeviceTcpWrapperIOSXE(port=0, state='config_locked')
         md.start()
@@ -849,7 +1124,20 @@ class TestIosXEConfigure(unittest.TestCase):
         c.configure('wsma agent exec')
         c.disconnect()
 
-
+    def test_configure_pki_hexmode(self):
+        c = Connection(hostname='Switch',
+                       start=['mock_device_cli --os iosxe --state general_enable'],
+                       os='iosxe',
+                       mit=True,
+                       init_exec_commands=[],
+                       init_config_commands=[],
+                       log_buffer=True,
+                       )
+        try:
+            c.connect()
+            c.configure(['crypto pki certificate chain SLA-TrustPoint', 'certificate ca 01'])
+        finally:
+            c.disconnect()
 class TestIosXEEnableSecret(unittest.TestCase):
 
     def test_enable_secret(self):
@@ -874,7 +1162,7 @@ class TestIosXEEnableSecret(unittest.TestCase):
                        credentials=dict(default=dict(password='veryverybadpw')),
                        log_buffer=True
                        )
-        with self.assertRaisesRegex(UniconConnectionError, 'failed to connect to R1'):
+        with self.assertRaisesRegex(UniconAuthenticationError, 'Too many enable password retries'):
             c.connect()
         c.disconnect()
 
@@ -1069,6 +1357,18 @@ class TestSyslogHandler(unittest.TestCase):
             raise
         finally:
             c.disconnect()
+    
+    def test_handler_ddns_pattern(self):
+        d = Connection(
+            hostname='Router',
+            start=['mock_device_cli --os iosxe --state ip_ddns_update_method --hostname Router'],
+            os='iosxe',
+            credentials=dict(default=dict(username='cisco', password='cisco')),
+            log_buffer=True
+        )
+
+        d.connect()
+        d.disconnect()
 
 
 class TestIosxeAsr1k(unittest.TestCase):
@@ -1178,6 +1478,51 @@ class TestIosxeTclsh(unittest.TestCase):
         c.tclsh()
         c.enable()
         c.disconnect()
+
+class TestIosxeAcmConfigure(unittest.TestCase):
+
+    def test_acm_configure(self):
+        c = Connection(
+            hostname='PE1',
+            start=['mock_device_cli --os iosxe --state general_enable --hostname PE1'],
+            os='iosxe',
+            mit=True
+        )
+        c.connect()
+        config_txt = [
+            'interface loopback 1',
+            'description test'
+        ]
+        c.configure(config_txt, acm_configlet='my_config')
+        c.disconnect()
+
+    def test_ha_acm_configure(self):
+        md = MockDeviceTcpWrapperIOSXE(port=0, state='ha_cat9k_exec,ha_cat9k_stby_exec', hostname='R1')
+        md.start()
+
+        c = Connection(
+            hostname='R1',
+            start=[
+                'telnet 127.0.0.1 {}'.format(md.ports[0]),
+                'telnet 127.0.0.1 {}'.format(md.ports[1])
+            ],
+            os='iosxe',
+            connection_timeout=10,
+            credentials=dict(default=dict(password='lab'))
+        )
+        try:
+            c.connect()
+            config_txt = [
+            'interface loopback 1',
+            'description test'
+            ]
+            c.configure(config_txt, acm_configlet='my_config')
+        except Exception:
+            raise
+        finally:
+            c.disconnect()
+            md.stop()
+
 
 class TestConfigTransition(unittest.TestCase):
 

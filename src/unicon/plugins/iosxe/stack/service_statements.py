@@ -1,30 +1,38 @@
 """ Generic IOS-XE Stack Service Statements """
-import time
 from unicon.eal.dialogs import Statement
-from unicon.plugins.generic.service_statements import reload_statement_list
-from unicon.plugins.iosxe.service_statements import factory_reset_confirm, are_you_sure_confirm
-from .service_patterns import StackIosXESwitchoverPatterns, StackIosXEReloadPatterns
+
+from unicon.plugins.generic.service_statements import (reload_statement_list,
+                                                       save_env,
+                                                       reload_confirm_ios,
+                                                       reload_confirm_iosxe,
+                                                       reload_entire_shelf,
+                                                       reload_this_shelf,
+                                                       send_response)
+
+from unicon.plugins.iosxe.service_statements import (factory_reset_confirm,
+                                                     are_you_sure_confirm)
+from .service_patterns import (StackIosXESwitchoverPatterns,
+                               StackIosXEReloadPatterns)
+
 
 def update_curr_state(spawn, context, state):
     context['state'] = state
 
+
 def switchover_failed(spawn, context):
     context['switchover_failed'] = True
+
 
 def boot_from_rommon(sm, spawn, context):
     cmd = "boot {}".format(context['image_to_boot']) \
         if "image_to_boot" in context else "boot"
     spawn.sendline(cmd)
 
+
 def send_boot_cmd(spawn, context):
     cmd = "boot {}".format(context['image_to_boot']) \
         if "image_to_boot" in context else "boot"
     spawn.sendline(cmd)
-
-def stack_press_return(spawn, context):
-    spawn.log.info('Waiting for {} seconds'.format(spawn.timeout))
-    time.sleep(spawn.timeout)
-    spawn.sendline()
 
 
 # switchover service statements
@@ -33,28 +41,34 @@ switchover_pat = StackIosXESwitchoverPatterns()
 save_config = Statement(pattern=switchover_pat.save_config,
                         action='sendline(yes)',
                         loop_continue=True, continue_timer=False)
+
 proceed_sw = Statement(pattern=switchover_pat.switchover_proceed,
-                        action='sendline()',
-                        loop_continue=True, continue_timer=False)
+                       action='sendline()',
+                       loop_continue=True, continue_timer=False)
+
 commit_changes = Statement(pattern=switchover_pat.cisco_commit_changes_prompt,
-                        action='sendline(yes)',
-                        loop_continue=True, continue_timer=False)
+                           action='sendline(yes)',
+                           loop_continue=True, continue_timer=False)
+
 term_state = Statement(pattern=switchover_pat.terminal_state,
-                        action='sendline(\r)',
-                        loop_continue=True, continue_timer=False)
+                       action='sendline(\r)',
+                       loop_continue=True, continue_timer=False)
+
 gen_rsh_key = Statement(pattern=switchover_pat.gen_rsh_key,
                         action='sendline()',
                         loop_continue=True, continue_timer=False)
+
 auto_pro = Statement(pattern=switchover_pat.auto_provision,
-                        action='sendline(yes)',
-                        loop_continue=True, continue_timer=False)
+                     action='sendline(yes)',
+                     loop_continue=True, continue_timer=False)
+
 secure_passwd = Statement(pattern=switchover_pat.secure_passwd_std,
-                        action='sendline(no)',
-                        loop_continue=True, continue_timer=False)
+                          action='sendline(no)',
+                          loop_continue=True, continue_timer=False)
 
 build_config = Statement(pattern=switchover_pat.build_config,
-                        action=None,
-                        loop_continue=True, continue_timer=False)
+                         action=None,
+                         loop_continue=True, continue_timer=False)
 
 sw_init = Statement(pattern=switchover_pat.switchover_init,
                     action=None,
@@ -85,12 +99,6 @@ dis_state = Statement(pattern=switchover_pat.disable_prompt,
                       loop_continue=False,
                       continue_timer=False)
 
-press_return = Statement(pattern=switchover_pat.press_return,
-                         action=stack_press_return,
-                         args=None,
-                         loop_continue=False,
-                         continue_timer=False)
-
 found_return = Statement(pattern=switchover_pat.press_return,
                          args=None,
                          loop_continue=False,
@@ -120,16 +128,33 @@ reload_shelf = Statement(pattern=reload_pat.reload_entire_shelf,
                          continue_timer=False)
 
 reload_fast = Statement(pattern=reload_pat.reload_fast,
-                         action='sendline()',
-                         loop_continue=True,
-                         continue_timer=False)
+                        action='sendline()',
+                        loop_continue=True,
+                        continue_timer=False)
+
+accelarating_discovery = Statement(pattern=reload_pat.accelarating_discovery,
+                                   action=send_response,
+                                   args=None,
+                                   loop_continue=False,
+                                   continue_timer=False)
+
+stack_reload_stmt_list_1 = [save_env, reload_confirm_ios, reload_confirm_iosxe,
+                            reload_entire_shelf, reload_this_shelf,
+                            # Below statements have loop_continue=False
+                            # enable and disable state is needed by dialog
+                            # processor during member reload to process the
+                            # device state during reload
+                            en_state, dis_state,
+                            switch_prompt,
+                            accelarating_discovery]
 
 stack_reload_stmt_list = list(reload_statement_list)
 
+# The enable and disable states are needed when using `reload slot N`
 stack_reload_stmt_list.extend([en_state, dis_state])
-stack_reload_stmt_list.insert(0, press_return)
 stack_reload_stmt_list.insert(0, reload_shelf)
 stack_reload_stmt_list.insert(0, reload_fast)
+
 
 stack_factory_reset_stmt_list = [factory_reset_confirm, are_you_sure_confirm]
 

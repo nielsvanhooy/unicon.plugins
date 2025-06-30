@@ -22,14 +22,21 @@ from unicon.core.errors import UniconAuthenticationError
 from unicon.core.errors import CredentialsExhaustedError
 
 # Declare token types for abstract token discovery
-TOKEN_TYPES = ['os', 'os_flavor', 'version', 'platform', 'model', 'pid']
+TOKEN_TYPES = ['os', 'os_flavor', 'version', 'platform', 'model', 'submodel', 'pid', 'chassis_type']
+OPTIONAL_TOKENS = ['os_flavor']
 ShowVersion = None
 ShowInventory = None
 Uname = None
+PID_TOKEN_FILE = Path(__file__).parent / 'pid_tokens.csv'
+
 
 def _fallback_cred(context):
-    return [context['default_cred_name']] \
+    creds = [context['default_cred_name']] \
         if 'default_cred_name' in context else []
+    if context.get('fallback_creds'):
+        creds.extend(context['fallback_creds'])
+    return creds
+
 
 def _get_creds_to_try(context):
     """ Get list of credentials to try. """
@@ -216,6 +223,16 @@ def load_token_csv_file(file_path, key='pid'):
 
     return ret_dict
 
+def get_device_mode(con):
+        '''Check the mode of device
+        '''
+        output = con.execute('show version | include operating mode')
+        if output:
+            pattern = re.compile(r'.*operating mode:\s*(?P<mode>[\w-]+).*', re.DOTALL)
+            m = pattern.match(output)
+            if m:
+                return m.groupdict().get('mode')
+
 
 class AbstractTokenDiscovery():
 
@@ -224,10 +241,10 @@ class AbstractTokenDiscovery():
         # Import them during object initialization if not already imported
         global ShowVersion
         if not ShowVersion:
-            from genie.libs.parser.generic.show_platform import ShowVersion
+            from genie.libs.parser.generic.rv1.show_platform import ShowVersion
         global ShowInventory
         if not ShowInventory:
-            from genie.libs.parser.generic.show_platform import ShowInventory
+            from genie.libs.parser.generic.rv1.show_platform import ShowInventory
         global Uname
         if not Uname:
             from genie.libs.parser.generic.show_platform import Uname
@@ -239,7 +256,7 @@ class AbstractTokenDiscovery():
 
         # Load the pid token lookup file
         self.pid_data = {}
-        self.pid_lookup_file = Path(__file__).parent / 'pid_tokens.csv'
+        self.pid_lookup_file = PID_TOKEN_FILE
         self.pid_data = load_token_csv_file(file_path=self.pid_lookup_file)
 
         # Attach commands and accompying classes for cleaner looping
@@ -264,9 +281,10 @@ class AbstractTokenDiscovery():
 
 
     def all_tokens_learned(self):
-        for _,token_value in self.learned_tokens.items():
-            if token_value == '' or token_value is None:
-                return False
+        for token ,token_value in self.learned_tokens.items():
+            if token not in OPTIONAL_TOKENS:
+                if token_value == '' or token_value is None:
+                    return False
         return True
 
 
@@ -274,7 +292,7 @@ class AbstractTokenDiscovery():
         try:
             data = self.pid_data[pid_to_check]
         except KeyError:
-            return None
+            return {'pid': pid_to_check}
         else:
             return {
                 'os': data['os'],
@@ -289,13 +307,32 @@ class AbstractTokenDiscovery():
         Loop through the commands one at a time and parse the output (if any).
         Update learned tokens when new token values are found
         """
+        # import is done here to avoid circular import error
+        from unicon.plugins.generic.statements import generic_statements
+
         device = self.device
         controller_mode = None
 
         discovery_prompt_stmt = \
             Statement(pattern=self.con.state_machine\
                 .get_state('learn_tokens_state').pattern)
-        dialog = Dialog([discovery_prompt_stmt]) + self.con.state_machine.default_dialog
+        dialog = Dialog([
+            discovery_prompt_stmt,
+            generic_statements.more_prompt_stmt,
+            generic_statements.syslog_msg_stmt
+        ])
+
+        # Try to get to enable mode, ignore failure
+        from unicon.plugins.generic.statements import generic_statements
+        enable_dialog = dialog + Dialog([
+            generic_statements.enable_password_stmt,
+            generic_statements.syslog_msg_stmt
+        ])
+        try:
+            self.con.sendline('enable')
+            enable_dialog.process(self.con.spawn, context=self.con.context)
+        except Exception:
+            pass
 
         # Execute the command on the device
         for cmd in self.commands_and_classes:
@@ -306,7 +343,9 @@ class AbstractTokenDiscovery():
                     f"Failed to execute command '{cmd}' on {self}. Reason: {e}")
                 continue
             else:
-                outcome = dialog.process(self.con.spawn)
+                outcome = dialog.process(self.con.spawn,
+                                         timeout=self.con.spawn.settings.EXEC_TIMEOUT
+                                        )
 
                 if not outcome.match_output:
                     continue
@@ -337,6 +376,11 @@ class AbstractTokenDiscovery():
 
                     if cmd == 'show inventory' and \
                             parsed_output.get('inventory_item_index', None):
+
+                        if parsed_output.get('chassis_type'):
+                            self.learned_tokens['chassis_type'] = \
+                                parsed_output.get('chassis_type')
+
                         # Look though pids that were found with show inventory
                         for _,entry_data in \
                                 parsed_output['inventory_item_index'].items():
@@ -504,7 +548,11 @@ class AbstractTokenDiscovery():
     def learn_device_tokens(self, overwrite_testbed_tokens=False):
         if not self.con.device:
             self.con.log.debug('No device object, cannot learn tokens')
-            return
+            return {}
+
+        if self.con.state_machine.current_state == 'standby_locked':
+            self.con.log.info('Device is locked, cannot learn tokens')
+            return {}
 
         if overwrite_testbed_tokens:
             self.con.log.info('+++ Learning device tokens +++')

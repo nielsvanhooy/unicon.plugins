@@ -23,6 +23,7 @@ cat9k_ha_standby_console:
 cat9k_enable_reload_to_rommon:
   prompt: "switch1#"
   commands:
+    "show version | include operating mode": ""
     "show boot": |
       ---------------------------
       Switch 1
@@ -44,6 +45,7 @@ cat9k_enable_reload_to_rommon:
 cat9k_enable_reload_to_rommon_break:
   prompt: "switch1#"
   commands:
+    "show version | include operating mode": ""
     "show boot": |
       ---------------------------
       Switch 1
@@ -66,6 +68,7 @@ cat9k_enable_reload_to_rommon_break:
 cat9k_enable_reload_to_rommon_break2:
   prompt: "switch1#"
   commands:
+    "show version | include operating mode": ""
     "show boot": |
       ---------------------------
       Switch 1
@@ -77,6 +80,52 @@ cat9k_enable_reload_to_rommon_break2:
       BOOT variable = flash:cat9k_iosxe.2019-06-21_17.21_sdcunha.SSA.bin;
       Manual Boot = no
       ENABLE_BREAK variable does not exist
+      Boot Mode = DEVICE
+      iPXE Timeout = 0
+    "config term":
+      new_state: cat9k_enable_reload_to_rommon_break_config
+    "reload":
+      new_state: cat9k_boot_to_rommon
+
+
+cat9k_enable_reload_to_rommon_break3:
+  prompt: "switch1#"
+  commands:
+    "show version | include operating mode": ""
+    "show boot": |
+      ---------------------------
+      Switch 1
+      ---------------------------
+      Current Boot Variables:
+      BOOT variable does not exist
+
+      Boot Variables on next reload:
+      BOOT variable does not exist
+      Manual Boot = yes
+      Enable Break = 1
+      Boot Mode = DEVICE
+      iPXE Timeout = 0
+    "config term":
+      new_state: cat9k_enable_reload_to_rommon_break_config
+    "reload":
+      new_state: cat9k_boot_to_rommon
+
+
+cat9k_enable_reload_to_rommon_break4:
+  prompt: "switch1#"
+  commands:
+    "show version | include operating mode": ""
+    "show boot": |
+      ---------------------------
+      Switch 1
+      ---------------------------
+      Current Boot Variables:
+      BOOT variable does not exist
+
+      Boot Variables on next reload:
+      BOOT variable does not exist
+      Manual Boot = yes
+      Enable Break = 0
       Boot Mode = DEVICE
       iPXE Timeout = 0
     "config term":

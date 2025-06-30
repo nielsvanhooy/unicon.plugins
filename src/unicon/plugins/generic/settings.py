@@ -55,6 +55,7 @@ class GenericSettings(Settings):
         self.CONSOLE_TIMEOUT = 60
         self.BOOT_TIMEOUT = 600
         self.MAX_BOOT_ATTEMPTS = 3
+        self.CONNECTION_REFUSED_MAX_COUNT = 3
 
         # Temporary enable secret used during setup
         # this is used if no password is available
@@ -86,17 +87,20 @@ class GenericSettings(Settings):
 
         # When connecting to a device via telnet, how long (in seconds)
         # to pause before checking the spawn buffer
-        self.ESCAPE_CHAR_CHATTY_TERM_WAIT = 0.25
+        self.ESCAPE_CHAR_CHATTY_TERM_WAIT = 0.5
 
         # number of cycles to wait for if the terminal is still chatty
-        self.ESCAPE_CHAR_CHATTY_TERM_WAIT_RETRIES = 12
+        self.ESCAPE_CHAR_CHATTY_TERM_WAIT_RETRIES = 6
 
         # prompt wait delay
-        self.ESCAPE_CHAR_PROMPT_WAIT = 0.5
+        self.ESCAPE_CHAR_PROMPT_WAIT = 1
 
         # prompt wait retries
         # (wait time: 0.5, 1, 1.5, 2, 2.5, 3, 3.5 == total wait: 14.0s)
         self.ESCAPE_CHAR_PROMPT_WAIT_RETRIES = 7
+
+        # commands to get a prompt, default to "enter"
+        self.ESCAPE_CHAR_PROMPT_COMMANDS = ['\r']
 
         # syslog message handling timers
         self.SYSLOG_WAIT = 1

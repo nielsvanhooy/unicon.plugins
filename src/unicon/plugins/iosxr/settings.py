@@ -49,6 +49,8 @@ class IOSXRSettings(GenericSettings):
             r'^%\s*Failed to commit.*'
         ]
 
+        self.HA_STANDBY_UNLOCK_COMMANDS = []
+
         self.EXECUTE_MATCHED_RETRIES = 1
         self.EXECUTE_MATCHED_RETRY_SLEEP = 0.1
 
@@ -57,3 +59,13 @@ class IOSXRSettings(GenericSettings):
 
         self.SHOW_REDUNDANCY_CMD = 'show redundancy | inc ^Node'
         self.REDUNDANCY_STATE_PATTERN = r'^Node \S+ is in (.*?) role'
+
+        self.SHOW_CONFIG_FAILED_CMD = 'show configuration failed'
+        self.UNICON_BACKEND_DECODE_ERROR_LIMIT = 10
+
+        # more prompt pattern is defined in plugins/iosxr/patterns.py as more_prompt
+        self.MORE_REPLACE_PATTERN = r'( *--\s?[Mm]ore\s?-- *|\(END\))'
+
+        # commands to send to get the device to respond
+        # for XR devices, use Ctrl-Q (\x11) as alternative command
+        self.ESCAPE_CHAR_PROMPT_COMMANDS = ['\r', '\x11']

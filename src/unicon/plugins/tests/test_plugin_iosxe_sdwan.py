@@ -1,12 +1,9 @@
 import unittest
-from unittest.mock import patch
 
 from pyats.topology import loader
 
 import unicon
 from unicon import Connection
-from unicon.eal.dialogs import Dialog, Statement
-from unicon.core.errors import SubCommandFailure, StateMachineError, UniconAuthenticationError, ConnectionError as UniconConnectionError
 from unicon.plugins.tests.mock.mock_device_iosxe import MockDeviceTcpWrapperIOSXE
 
 unicon.settings.Settings.POST_DISCONNECT_WAIT_SEC = 0
@@ -76,9 +73,77 @@ class TestIosXESdwanConnect(unittest.TestCase):
         finally:
             d.disconnect()
 
-    @classmethod
-    def tearDownClass(self):
-        self.md.stop()
+    def test_iosxe_sdwan_controller_mode_connect_1(self):
+        testbed = '''
+            devices:
+              Router:
+                type: router
+                os: iosxe
+                platform: sdwan
+                credentials:
+                    default:
+                        username: cisco
+                        password: cisco
+                connections:
+                  defaults:
+                    class: 'unicon.Unicon'
+                  cli:
+                    command: mock_device_cli --os iosxe --state sdwan_controller_mode_1
+        '''
+        t = loader.load(testbed)
+        d = t.devices.Router
+        try:
+            d.connect()
+        finally:
+            d.disconnect()
+
+    def test_iosxe_sdwan_controller_mode_connect_2(self):
+        testbed = '''
+            devices:
+              Router:
+                type: router
+                os: iosxe
+                platform: sdwan
+                credentials:
+                    default:
+                        username: cisco
+                        password: cisco
+                connections:
+                  defaults:
+                    class: 'unicon.Unicon'
+                  cli:
+                    command: mock_device_cli --os iosxe --state sdwan_controller_mode_2
+        '''
+        t = loader.load(testbed)
+        d = t.devices.Router
+        try:
+            d.connect()
+        finally:
+            d.disconnect()
+
+    def test_iosxe_sdwan_controller_mode_connect_3(self):
+        testbed = '''
+            devices:
+              Router:
+                type: router
+                os: iosxe
+                platform: sdwan
+                credentials:
+                    default:
+                        username: cisco
+                        password: cisco
+                connections:
+                  defaults:
+                    class: 'unicon.Unicon'
+                  cli:
+                    command: mock_device_cli --os iosxe --state sdwan_controller_mode_3
+        '''
+        t = loader.load(testbed)
+        d = t.devices.Router
+        try:
+            d.connect()
+        finally:
+            d.disconnect()
 
 class TestIosXESDWANConfigure(unittest.TestCase):
 

@@ -117,6 +117,17 @@ class TestCopyService(unittest.TestCase):
                         timeout=9)
         self.assertEqual(err.exception.args[0], 'Copy failed')
 
+    def test_copy_to_usb(self):
+        test_output = self.d.copy(source = 'bootflash:', dest = 'usb:',
+                          source_file = '/c8000aep-universalk9.17.12.04.0.4708.SSA.bin',
+                          dest_file = 'test/c8000aep-universalk9.17.12.04.0.4708.SSA.bin',
+                          sleep_time = 10)
+        expected_output = self.md.mock_data['dest_file_name']['commands']\
+                              ['test/c8000aep-universalk9.17.12.04.0.4708.SSA.bin']['response']
+        test_output = '\n'.join(test_output.splitlines())
+        expected_output = '\n'.join(expected_output.splitlines())
+        self.assertIn(expected_output, test_output)
+
 
 @patch.object(unicon.settings.Settings, 'POST_DISCONNECT_WAIT_SEC', 0)
 @patch.object(unicon.settings.Settings, 'GRACEFUL_DISCONNECT_WAIT_SEC', 0.2)
@@ -236,7 +247,38 @@ class TestIosXeCopyService(unittest.TestCase):
         expected_output = '\n'.join(expected_output.splitlines())
         self.assertIn(expected_output, output)
 
+    def test_from_tftp_testcase_name_pattern_issue(self):
+            output = self.d.copy(
+                source='bootflash:',
+                dest='tftp:',
+                source_file='test2',
+                dest_file='test',
+                server='10.1.6.243',
+                vrf='Mgmt-intf',
+            )
+            output = '\n'.join(output.splitlines())
+            expected_output = \
+                self.md.mock_data['copy_from_tftp_dest_filename_with_failure']\
+                ['commands']['test']['response']
+            expected_output = '\n'.join(expected_output.splitlines())
+            self.assertIn(expected_output, output)
 
+    def test_to_tftp_overwrite_False(self):
+        output = self.d.copy(
+            source='tftp:',
+            dest='bootflash:',
+            source_file='test',
+            dest_file='test2',
+            server='10.1.6.243',
+            vrf='Mgmt-intf',
+            overwrite=False,
+        )
+        output = '\n'.join(output.splitlines())
+        expected_output = \
+            self.md.mock_data['copy_to_tftp_dest_filename_overwrite']\
+            ['commands']['n']['response']
+        expected_output = '\n'.join(expected_output.splitlines())
+        self.assertIn(expected_output, output) 
 
 class TestMaxAttempts(unittest.TestCase):
     def setUp(self):

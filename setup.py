@@ -50,7 +50,8 @@ version, version_range = version_info('src', 'unicon', 'plugins', '__init__.py')
 
 install_requires = ['unicon {range}'.format(range = version_range),
                     'pyyaml',
-                    'PrettyTable']
+                    'PrettyTable',
+                    'cryptography>=43.0']
 
 # launch setup
 setup(

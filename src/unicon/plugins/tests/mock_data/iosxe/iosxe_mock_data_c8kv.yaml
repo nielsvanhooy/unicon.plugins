@@ -3,6 +3,7 @@ c8kv_enable:
   commands:
     'term length 0': ''
     'term width 0': ''
+    'show version | include operating mode' : ''
     'show version': |2
       Cisco IOS XE Software, Version BLD_POLARIS_DEV_LATEST_20200803_053108
       Cisco IOS Software [Bengaluru], Virtual XE Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Experimental Version 17.4.20200803:054658 [S2C-build-polaris_dev-119012-/nobackup/mcpre/BLD-BLD_POLARIS_DEV_LATEST_20200803_053108 218]
@@ -73,6 +74,12 @@ c8kv_enable:
     'config term':
       new_state: 'c8kv_config_term'
 
+c8kv_enable_autoboot_disabled:
+  prompt: '%N#'
+  commands:
+    'reload':
+      new_state: 'c8kv_rommon'
+
 c8kv_config_term:
   prompt: "%N(config)#"
   commands:
@@ -82,6 +89,14 @@ c8kv_config_term:
     'exec-timeout 0': ''
     'end':
       new_state: 'c8kv_enable'
+    'config-register 0x40':
+      new_state: 'c8kv_config_term_autoboot_disabled'
+
+c8kv_config_term_autoboot_disabled:
+  prompt: "%N(config)#"
+  commands:
+    'end':
+      new_state: 'c8kv_enable_autoboot_disabled'
 
 c8kv_system_config_modified:
   prompt: 'System configuration has been modified. Save? [yes/no]:'
@@ -218,6 +233,12 @@ c8kv_grub_boot_image:
 c8kv_exec:
   prompt: '%N>'
   commands:
+    'show version | include operating mode': ''
     'enable':
       new_state: 'c8kv_enable'
 
+c8kv_rommon:
+  prompt: "grub>"
+  commands:
+    'boot':
+      new_state: 'c8kv_enable'
