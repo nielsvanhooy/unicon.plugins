@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 from pyats.topology import loader
+from unittest.mock import Mock
 
 import unicon
 from unicon import Connection
@@ -318,7 +319,6 @@ class TestIosXEPluginConnect(unittest.TestCase):
         finally:
             c.disconnect()
 
-
 class TestIosXEPluginExecute(unittest.TestCase):
 
     @classmethod
@@ -412,6 +412,58 @@ class TestIosXEPluginDisableEnable(unittest.TestCase):
             c.connect()
         c.disconnect()
 
+    def test_enable_password_handler(self):
+        c = Connection(hostname='Router',
+                       start=['mock_device_cli --os iosxe --state general_exec1 --hostname Router'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='cisco', password='cisco'),
+                                        enable=dict(password='cisco123')),
+                       log_buffer=True
+                       )
+        try:
+            c.connect()
+        finally:
+            c.disconnect()
+
+    def test_enable_password_handler2(self):
+        c = Connection(hostname='Router',
+                       start=['mock_device_cli --os iosxe --state general_login1 --hostname Router'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='notenable', password='cisco'),
+                                        enable=dict(password='cisco123')),
+                       log_buffer=True
+                       )
+        try:
+            c.connect()
+        finally:
+            c.disconnect()
+
+    def test_enable_password_handler3(self):
+        c = Connection(hostname='Router',
+                       start=['mock_device_cli --os iosxe --state general_exec2 --hostname Router'],
+                       os='iosxe',
+                       credentials=dict(default=dict(username='notenable', password='cisco'),
+                                        enable=dict(password='cisco2')),
+                       log_buffer=True,
+                       mit=True
+                       )
+        try:
+            c.connect()
+            c.enable(command='enable 2')
+        finally:
+            c.disconnect()
+
+    def test_disable_pattern(self):
+        from unicon.plugins.iosxe.statemachine import IosXESingleRpStateMachine
+        from unicon.plugins.iosxe.settings import IosXESettings
+        settings = IosXESettings()
+        sm = IosXESingleRpStateMachine(learn_hostname=True)
+        sm.learn_pattern = settings.DEFAULT_LEARNED_HOSTNAME
+        state = sm.get_state('disable')
+        match = re.match(state.pattern, 'route(s)  : 0.0.0.0 ->')
+        self.assertIsNone(match)
+        match = re.match(state.pattern, 'rtr->')
+        self.assertIsNotNone(match)
 
 class TestIosXEPluginPing(unittest.TestCase):
 
@@ -875,6 +927,19 @@ class TestIosXEDiol(unittest.TestCase):
 
 class TestIosXEConfigure(unittest.TestCase):
 
+    def test_configure_cert_trustpool(self):
+        c = Connection(hostname='RouterRP',
+                       start=['mock_device_cli --os iosxe --state general_config --hostname RouterRP'],
+                       os='iosxe',
+                       mit=True,
+                       init_exec_commands=[],
+                       init_config_commands=[],
+                       log_buffer=True
+                       )
+        c.connect()
+        c.configure(['crypto pki certificate pool', 'cabundle nvram:ios_core.p7b'])
+        c.disconnect()
+
     def test_configure_are_you_sure_ywtdt(self):
         c = Connection(hostname='RouterRP',
                        start=['mock_device_cli --os iosxe --state general_enable --hostname RouterRP'],
@@ -1138,6 +1203,7 @@ class TestIosXEConfigure(unittest.TestCase):
             c.configure(['crypto pki certificate chain SLA-TrustPoint', 'certificate ca 01'])
         finally:
             c.disconnect()
+                   
 class TestIosXEEnableSecret(unittest.TestCase):
 
     def test_enable_secret(self):
@@ -1357,7 +1423,7 @@ class TestSyslogHandler(unittest.TestCase):
             raise
         finally:
             c.disconnect()
-    
+
     def test_handler_ddns_pattern(self):
         d = Connection(
             hostname='Router',
@@ -1367,8 +1433,25 @@ class TestSyslogHandler(unittest.TestCase):
             log_buffer=True
         )
 
-        d.connect()
-        d.disconnect()
+        try:
+            d.connect()
+        finally:
+            d.disconnect()
+
+    def test_reload_security_log_message(self):
+        d = Connection(
+            hostname='Router',
+            start=['mock_device_cli --os iosxe --state enable_reload_security_log1 --hostname Router'],
+            os='iosxe',
+            credentials=dict(default=dict(username='cisco', password='cisco')),
+            log_buffer=True,
+            mit=True,
+        )
+        try:
+            d.connect()
+            d.reload(post_reload_wait_time=3)
+        finally:
+            d.disconnect()
 
 
 class TestIosxeAsr1k(unittest.TestCase):
@@ -1479,6 +1562,19 @@ class TestIosxeTclsh(unittest.TestCase):
         c.enable()
         c.disconnect()
 
+    def test_tclsh_continue(self):
+        c = Connection(
+            hostname='R1',
+            start=['mock_device_cli --os iosxe --state tclsh_continue --hostname R1'],
+            os='iosxe',
+            mit=True
+        )
+        try:
+            c.connect()
+        finally:
+            c.disconnect()
+
+
 class TestIosxeAcmConfigure(unittest.TestCase):
 
     def test_acm_configure(self):
@@ -1523,6 +1619,40 @@ class TestIosxeAcmConfigure(unittest.TestCase):
             c.disconnect()
             md.stop()
 
+class TestIosxeAcmRulesConfigure(unittest.TestCase):
+
+    def test_acm_rules_configure(self):
+        c = Connection(
+            hostname='PE1',
+            start=['mock_device_cli --os iosxe --state general_enable --hostname PE1'],
+            os='iosxe',
+            mit=True
+        )
+        c.connect()
+        config_txt = [
+            'match mode mdt-subscription-mode command no',
+            'match mode interface command no ip address 10.43.188.58 255.255.255.192',
+            'action pre-apply'
+        ]
+        c.configure(config_txt, rules=True)
+        c.disconnect()
+
+class TestIosxeSyntaxConfigure(unittest.TestCase):
+
+    def test_syntax_configure(self):
+        c = Connection(
+            hostname='PE1',
+            start=['mock_device_cli --os iosxe --state general_enable --hostname PE1'],
+            os='iosxe',
+            mit=True
+        )
+        c.connect()
+        config_txt = [
+            'interface loopback 1',
+            'description test'
+        ]
+        c.configure(config_txt, config_syntax_check='my_config')
+        c.disconnect()
 
 class TestConfigTransition(unittest.TestCase):
 
@@ -1648,8 +1778,6 @@ class TestMaintenanceMode(unittest.TestCase):
         c.switchto('maintenance')
         c.switchto('enable')
         c.disconnect()
-
-
 
 if __name__ == "__main__":
     unittest.main()

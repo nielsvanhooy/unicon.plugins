@@ -1,4 +1,6 @@
 """ Stack based IOS-XE service implementations. """
+import io
+import logging
 from time import sleep, time
 from collections import namedtuple
 from datetime import datetime, timedelta
@@ -8,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, wait as wait_futures, ALL_COM
 from unicon.eal.dialogs import Dialog
 from unicon.core.errors import SubCommandFailure
 from unicon.bases.routers.services import BaseService
+from unicon.logs import UniconStreamHandler, UNICON_LOG_FORMAT
 
 from .utils import StackUtils
 from unicon.plugins.generic.statements import custom_auth_statements, buffer_settled
@@ -195,6 +198,7 @@ class StackReload(BaseService):
         self.end_state = 'enable'
         self.timeout = connection.settings.STACK_RELOAD_TIMEOUT
         self.reload_command = "redundancy reload shelf"
+        self.log_buffer = io.StringIO()
         self.dialog = Dialog(stack_reload_stmt_list)
 
     def call_service(self,
@@ -213,6 +217,7 @@ class StackReload(BaseService):
         self.result = False
         if member:
             reload_command = f'reload slot {member}'
+
         reload_cmd = reload_command or self.reload_command
         timeout = timeout or self.timeout
         conn = self.connection.active
@@ -233,10 +238,29 @@ class StackReload(BaseService):
             if not isinstance(append_error_pattern, list):
                 raise ValueError('append_error_pattern should be a list')
             self.error_pattern += append_error_pattern
+
+        # Connecting to the log handler to capture the buffer output
+        lb = UniconStreamHandler(self.log_buffer)
+        lb.setFormatter(logging.Formatter(fmt=UNICON_LOG_FORMAT))
+        self.connection.log.addHandler(lb)
+
+        # logging the output to subconnections
+        for subcon in self.connection.subconnections:
+            subcon.log.addHandler(lb)
+
+        # Clear log buffer
+        self.log_buffer.seek(0)
+        self.log_buffer.truncate()
+
         # update all subconnection context with image_to_boot
         if image_to_boot:
             for subconn in self.connection.subconnections:
                 subconn.context.image_to_boot = image_to_boot
+            
+            # Update the reload command to use the image_to_boot
+            self.context["image_to_boot"] = image_to_boot
+            reload_cmd = f"boot {image_to_boot.strip()}"
+            
         reload_dialog = self.dialog
         if reply:
             reload_dialog = reply + reload_dialog
@@ -399,12 +423,23 @@ class StackReload(BaseService):
         self.connection.connect()
 
         self.connection.log.info("+++ Reload Completed Successfully +++")
+
+        # Read the log buffer 
+        self.log_buffer.seek(0)
+        reload_output = self.log_buffer.read()
+        # clear buffer
+        self.log_buffer.truncate()
+
+        # Remove the handler
+        self.connection.log.removeHandler(lb)
+        for subcon in self.connection.subconnections:
+            subcon.log.removeHandler(lb)
+
         self.result = True
 
         if return_output:
             Result = namedtuple('Result', ['result', 'output'])
-            self.result = Result(self.result, reload_cmd_output.match_output.replace(reload_cmd, '', 1))
-
+            self.result = Result(self.result, reload_output.replace(reload_cmd, '', 1))
 
 class StackRommon(GenericExecute):
     """ Brings device to the Rommon prompt and executes commands specified

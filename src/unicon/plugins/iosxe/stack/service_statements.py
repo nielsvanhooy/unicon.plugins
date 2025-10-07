@@ -86,6 +86,9 @@ switch_prompt = Statement(pattern=switchover_pat.rommon_prompt,
                           args={'state': 'rommon'},
                           loop_continue=False,
                           continue_timer=False)
+fastreload_iosxeswitch = Statement(pattern=switchover_pat.fastreload_iosxeswitch,
+                        action='sendline()',
+                        loop_continue=True, continue_timer=False)
 
 en_state = Statement(pattern=switchover_pat.enable_prompt,
                      action=update_curr_state,
@@ -138,6 +141,12 @@ accelarating_discovery = Statement(pattern=reload_pat.accelarating_discovery,
                                    loop_continue=False,
                                    continue_timer=False)
 
+proceed_prompt_stmt = Statement(pattern=reload_pat.proceed_prompt,
+                                   action='sendline(y)',
+                                   args=None,
+                                   loop_continue=True,
+                                   continue_timer=False)
+
 stack_reload_stmt_list_1 = [save_env, reload_confirm_ios, reload_confirm_iosxe,
                             reload_entire_shelf, reload_this_shelf,
                             # Below statements have loop_continue=False
@@ -146,7 +155,8 @@ stack_reload_stmt_list_1 = [save_env, reload_confirm_ios, reload_confirm_iosxe,
                             # device state during reload
                             en_state, dis_state,
                             switch_prompt,
-                            accelarating_discovery]
+                            accelarating_discovery, fastreload_iosxeswitch,
+                            proceed_prompt_stmt]
 
 stack_reload_stmt_list = list(reload_statement_list)
 
