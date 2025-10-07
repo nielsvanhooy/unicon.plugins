@@ -255,7 +255,10 @@ class Reload(GenericReload):
                 raise TypeError('append_error_pattern must be a list')
             self.error_pattern += append_error_pattern
 
-        reconnect_sleep = reconnect_sleep or con.settings.RELOAD_RECONNECT_WAIT
+        
+        if reconnect_sleep is None:
+            reconnect_sleep = max(con.settings.RELOAD_RECONNECT_WAIT, con.settings.POST_RELOAD_WAIT)
+
         config_lock_retries = config_lock_retries \
                               or con.settings.CONFIG_POST_RELOAD_MAX_RETRIES
         config_lock_retry_sleep = config_lock_retry_sleep \
@@ -323,7 +326,7 @@ class Reload(GenericReload):
                     if con.is_connected:
                         break
             else:
-                seconds = reconnect_sleep or con.settings.POST_RELOAD_WAIT
+                seconds = reconnect_sleep
                 con.log.info('Waiting for boot messages to settle for {} '
                              'seconds'.format(seconds))
                 wait_time = timedelta(seconds=seconds)
@@ -1611,14 +1614,22 @@ class BashService(GenericBashService):
             self.end_state = 'boot'
         super().pre_service(*args, **kwargs)
 
-    def call_service(self, enable_bash=True, **kwargs):
-        super().call_service(enable_bash=enable_bash, **kwargs)
+    def call_service(self, enable_bash=True, module=None, command=None, **kwargs):
+        super().call_service(enable_bash=enable_bash, module=module, command=command, **kwargs)
 
     def post_service(self, *args, **kwargs):
         self.start_state = self.orig_state_state
         self.end_state = self.orig_end_state
 
     class ContextMgr(GenericBashService.ContextMgr):
+
+        def __init__(self, connection, module=None, command=None, **kwargs):
+            super().__init__(connection, **kwargs)
+            self.module = module
+            self.conn.context['_module'] = module
+            if self.module:
+                command = command or 'sudo su'
+            self.conn.context['_bash_command'] = command
 
         def __enter__(self):
             self.conn.log.debug('+++ attaching bash shell +++')
@@ -1632,10 +1643,12 @@ class BashService(GenericBashService):
                     self.conn.configure('feature bash', timeout=self.timeout)
 
             sm = self.conn.state_machine
-            sm.go_to('shell', self.conn.spawn)
+            sm.go_to('shell', self.conn.spawn, context=self.conn.context)
+
+            if self.module:
+                sm.go_to('lc_shell', self.conn.spawn, context=self.conn.context)
 
             return self
-
 
 
 class L2ribDtService(BaseService):

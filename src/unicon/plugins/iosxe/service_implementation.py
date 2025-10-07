@@ -24,7 +24,7 @@ from unicon.plugins.generic.service_implementation import (
 
 from .service_statements import execute_statement_list, configure_statement_list, confirm
 
-from .statements import grub_prompt_stmt
+from .statements import grub_prompt_stmt, boot_from_rommon_stmt
 
 from unicon.plugins.generic.utils import GenericUtils
 from unicon.plugins.generic.service_implementation import BashService as GenericBashService
@@ -54,6 +54,23 @@ class Configure(GenericConfigure):
                 return result
 
         self.utils = ConfigUtils()
+
+    def pre_service(self, *args, **kwargs):
+        self.acm_configlet = kwargs.pop('acm_configlet', None)
+        self.prompt_recovery = kwargs.get('prompt_recovery', True)
+
+        if self.acm_configlet:
+            self.connection.state_machine.go_to('acm', self.connection.spawn,context={'acm_configlet': self.acm_configlet})
+            self.start_state = 'acm'
+            self.end_state = 'acm'
+        else:
+            super().pre_service(*args, **kwargs)
+
+    def post_service(self, *args, **kwargs):
+        if self.acm_configlet:
+            self.connection.state_machine.go_to('enable', self.connection.spawn)
+        else:
+            super().post_service(*args, **kwargs)
 
 
 class Config(Configure):
@@ -95,6 +112,23 @@ class HAConfigure(GenericHAConfigure):
     def __init__(self, connection, context, **kwargs):
         super().__init__(connection, context, **kwargs)
         self.dialog += Dialog(configure_statement_list)
+
+    def pre_service(self, *args, **kwargs):
+        self.acm_configlet = kwargs.pop('acm_configlet', None)
+        self.prompt_recovery = kwargs.get('prompt_recovery', True)
+
+        if self.acm_configlet:
+            self.connection.state_machine.go_to('acm', self.connection.spawn,context={'acm_configlet': self.acm_configlet})
+            self.start_state = 'acm'
+            self.end_state = 'acm'
+        else:
+            super().pre_service(*args, **kwargs)
+
+    def post_service(self, *args, **kwargs):
+        if self.acm_configlet:
+            self.connection.state_machine.go_to('enable', self.connection.spawn)
+        else:
+            super().post_service(*args, **kwargs)
 
 
 class HAConfig(HAConfigure):
@@ -165,6 +199,12 @@ class BashService(GenericBashService):
             handle.context['_chassis'] = kwargs.get('chassis')
         else:
             handle.context.pop('_chassis', None)
+        if kwargs.get('disable_selinux') is not None:
+            handle.context['_disable_selinux'] = kwargs.get('disable_selinux')
+        elif hasattr(self, 'disable_selinux'):
+            handle.context['_disable_selinux'] = self.disable_selinux
+        else:
+            handle.context.pop('_disable_selinux', None)
         super().pre_service(*args, **kwargs)
 
     class ContextMgr(GenericBashService.ContextMgr):
@@ -175,6 +215,12 @@ class BashService(GenericBashService):
                              **kwargs)
 
         def __enter__(self):
+
+            if self.conn.context.get('_disable_selinux'):
+                try:
+                    self.conn.execute('set platform software selinux permissive')
+                except SubCommandFailure:
+                    pass
 
             self.conn.log.debug('+++ attaching bash shell +++')
             # enter shell prompt
@@ -190,6 +236,16 @@ class BashService(GenericBashService):
 
             return self
 
+        def __exit__(self, type, value, traceback):
+            res = super().__exit__(type, value, traceback)
+
+            if self.conn.context.get('_disable_selinux'):
+                try:
+                    self.conn.execute('set platform software selinux default')
+                except SubCommandFailure:
+                    pass
+
+            return res
 
 class ResetStandbyRP(GenericResetStandbyRP):
     """ Service to reset the standby rp.
@@ -237,7 +293,7 @@ class Reload(GenericReload):
     def __init__(self, connection, context, **kwargs):
         super().__init__(connection, context, **kwargs)
         # Add the grub prompt statement
-        self.dialog += Dialog([grub_prompt_stmt])
+        self.dialog += Dialog([grub_prompt_stmt, boot_from_rommon_stmt])
 
     def pre_service(self, *args, **kwargs):
         self.prompt_recovery = self.connection.prompt_recovery
@@ -256,6 +312,7 @@ class Reload(GenericReload):
                      return_output=False,
                      reload_creds=None,
                      grub_boot_image=None,
+                     post_reload_wait_time=None,
                      *args, **kwargs):
         sm = self.get_sm()
 
@@ -276,6 +333,7 @@ class Reload(GenericReload):
             timeout=timeout,
             return_output=return_output,
             reload_creds=reload_creds,
+            post_reload_wait_time=post_reload_wait_time,
             *args, **kwargs)
 
         self.context.pop("image_to_boot", None)
@@ -325,7 +383,8 @@ class Rommon(GenericExecute):
         sm.go_to('enable',
                  con.spawn,
                  context=self.context)
-        con.configure('config-register 0x0')
+        confreg = kwargs.get('config_register', "0x0")
+        con.configure('config-register {}'.format(confreg))
         super().pre_service(*args, **kwargs)
 
 
@@ -371,6 +430,7 @@ class Tclsh(Execute):
         self.end_state = 'tclsh'
         self.service_name = 'tclsh'
         self.__dict__.update(kwargs)
+
 
 class MaintenanceMode(ContextMgrBaseService):
 

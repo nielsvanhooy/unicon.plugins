@@ -1,12 +1,15 @@
 """ Stack utilities. """
 
 import re
+import logging
 from time import sleep, time
 
 from unicon.eal.dialogs import Dialog
 from unicon.utils import Utils, AttributeDict
 
 from .service_statements import send_boot
+
+logger = logging.getLogger(__name__)
 
 
 class StackUtils(Utils):
@@ -83,9 +86,12 @@ class StackUtils(Utils):
             None
         """
         connection.spawn.sendline()
+
+        # reload dialog is expected to passed here
         dialog.process(connection.spawn, timeout=timeout,
                         prompt_recovery=prompt_recovery,
                         context=connection.context)
+
         connection.state_machine.go_to('any', connection.spawn, timeout=timeout,
                                     prompt_recovery=prompt_recovery,
                                     context=connection.context)
@@ -143,7 +149,7 @@ class StackUtils(Utils):
         return active == 'Ready'
 
 
-    def is_all_member_ready(self, connection, timeout=120, interval=30):
+    def is_all_member_ready(self, connection, timeout=270, interval=30):
         """ Check whether all rp are in ready state
             including active, standby and members
 

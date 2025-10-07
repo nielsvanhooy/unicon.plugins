@@ -8,6 +8,7 @@ from unicon.plugins.utils import load_token_csv_file
 from unicon.plugins.tests.mock.mock_device_generic import (
     MockDeviceTcpWrapperGeneric
 )
+from unicon.core.errors import LearnTokenError
 
 
 class TestAbstractTokenDiscoveryConnection(unittest.TestCase):
@@ -40,7 +41,6 @@ devices:
         self.tb = load(self.testbed)
         self.dev = self.tb.devices.R1
 
-
     def test_asa_learn_tokens_from_show_version(self):
         # Set up device to use correct mock_device data
         self.dev.connections.cli.command = \
@@ -52,15 +52,18 @@ devices:
         self.dev.connections.cli['arguments']['overwrite_testbed_tokens'] = True
 
         # Test connection succeeds and tokens learned
-        self.dev.connect()
-        self.assertEqual(self.dev.os, 'asa')
-        self.assertEqual(self.dev.version, '8.4.1')
-        self.assertEqual(self.dev.platform, 'asa5520')
+        try:
+            self.dev.connect()
+            self.assertEqual(self.dev.os, 'asa')
+            self.assertEqual(self.dev.version, '8.4.1')
+            self.assertEqual(self.dev.platform, 'asa5520')
+        finally:
+            self.dev.disconnect()
 
         # Test that connection was redirected to the corresponding plugin
         with open(self.dev.logfile) as f:
             log_contents = f.read()
-        self.assertRegexpMatches(
+        self.assertRegex(
             log_contents,
             r'\+\+\+ Unicon plugin asa( \(unicon\.plugins\.asa\))? \+\+\+'
         )
@@ -72,16 +75,20 @@ devices:
             "mock_device_cli --os generic --state ios_login"
 
         # Test connection succeeds and tokens learned
-        self.dev.connect(learn_tokens=True, learn_hostname=True)
-        self.assertEqual(self.dev.os, 'ios')
-        self.assertEqual(self.dev.version, '15')
-        self.assertEqual(self.dev.platform, 'c7200p')
-        self.assertEqual(self.dev.pid, '7206VXR')
+        try:
+            self.dev.connect(learn_tokens=True, learn_hostname=True)
+            self.assertEqual(self.dev.state_machine.current_state, 'enable')
+            self.assertEqual(self.dev.os, 'ios')
+            self.assertEqual(self.dev.version, '15')
+            self.assertEqual(self.dev.platform, 'c7200p')
+            self.assertEqual(self.dev.pid, '7206VXR')
+        finally:
+            self.dev.disconnect()
 
         # Test that connection was redirected to the corresponding plugin
         with open(self.dev.logfile) as f:
             log_contents = f.read()
-        self.assertRegexpMatches(
+        self.assertRegex(
             log_contents,
             r'\+\+\+ Unicon plugin ios( \(unicon\.plugins\.ios\))? \+\+\+'
         )
@@ -94,20 +101,39 @@ devices:
             "mock_device_cli --os generic --state iosxe_login"
 
         # Test connection succeeds and tokens learned
-        self.dev.connect(learn_tokens=True, learn_hostname=True)
-        self.assertEqual(self.dev.os, 'iosxe')
-        self.assertEqual(self.dev.version, '15.2')
-        self.assertEqual(self.dev.platform, 'asr1k')
-        self.assertEqual(self.dev.model, 'asr1000')
-        self.assertEqual(self.dev.pid, 'ASR1006')
+        try:
+            self.dev.connect(learn_tokens=True, learn_hostname=True)
+            self.assertEqual(self.dev.os, 'iosxe')
+            self.assertEqual(self.dev.version, '15.2')
+            self.assertEqual(self.dev.platform, 'asr1k')
+            self.assertEqual(self.dev.model, 'asr1006')
+            self.assertEqual(self.dev.pid, 'ASR1006')
+        finally:
+            self.dev.disconnect()
 
         # Test that connection was redirected to the corresponding plugin
         with open(self.dev.logfile) as f:
             log_contents = f.read()
-        self.assertRegexpMatches(
+        self.assertRegex(
             log_contents,
             r'\+\+\+ Unicon plugin iosxe( \(unicon\.(internal\.)?plugins\.iosxe\))? \+\+\+'
         )
+    # test for controller mode for sdwan
+    def test_iosxe_learn_tokens_from_show_version_sdwan(self):
+        # Set up device to use correct mock_device data
+        self.dev.connections.cli.command = \
+            "mock_device_cli --os generic --state iosxe_login3"
+
+        # Test connection succeeds and tokens learned
+        try:
+            self.dev.connect(learn_tokens=True)
+            self.assertEqual(self.dev.os, 'iosxe')
+            self.assertEqual(self.dev.version, '17.14')
+            self.assertEqual(self.dev.platform, 'sdwan')
+            self.assertEqual(self.dev.model, 'c5000')
+            self.assertEqual(self.dev.pid, 'WS-C5002')
+        finally:
+            self.dev.disconnect()
 
     def test_iosxr_learn_tokens_from_show_version(self):
         # Set up device to use correct mock_device data
@@ -115,16 +141,19 @@ devices:
             "mock_device_cli --os generic --state iosxr_login"
 
         # Test connection succeeds and tokens learned
-        self.dev.connect(learn_tokens=True, learn_hostname=True)
-        self.assertEqual(self.dev.os, 'iosxr')
-        self.assertEqual(self.dev.os_flavor, 'lnt')
-        self.assertEqual(self.dev.version, '5.2.3.12i')
-        self.assertEqual(self.dev.platform, 'iosxrv')
+        try:
+            self.dev.connect(learn_tokens=True, learn_hostname=True)
+            self.assertEqual(self.dev.os, 'iosxr')
+            self.assertEqual(self.dev.os_flavor, 'lnt')
+            self.assertEqual(self.dev.version, '5.2.3.12i')
+            self.assertEqual(self.dev.platform, 'iosxrv')
+        finally:
+            self.dev.disconnect()
 
         # Test that connection was redirected to the corresponding plugin
         with open(self.dev.logfile) as f:
             log_contents = f.read()
-        self.assertRegexpMatches(
+        self.assertRegex(
             log_contents,
             r'\+\+\+ Unicon plugin iosxr/iosxrv( \(unicon\.plugins\.iosxr\.iosxrv\))? \+\+\+'
         )
@@ -136,17 +165,20 @@ devices:
         self.dev.connections.cli.settings['LEARN_DEVICE_TOKENS'] = True
 
         # Test connection succeeds and tokens learned
-        self.dev.connect(learn_hostname=True)
-        self.assertEqual(self.dev.os, 'nxos')
-        self.assertEqual(self.dev.version, '7.3.5n1.1')
-        self.assertEqual(self.dev.platform, 'n5k')
-        self.assertEqual(self.dev.model, 'n5500')
-        self.assertEqual(self.dev.pid, 'N5K-C5548P')
+        try:
+            self.dev.connect(learn_hostname=True)
+            self.assertEqual(self.dev.os, 'nxos')
+            self.assertEqual(self.dev.version, '7.3.5n1.1')
+            self.assertEqual(self.dev.platform, 'n5k')
+            self.assertEqual(self.dev.model, 'n5500')
+            self.assertEqual(self.dev.pid, 'N5K-C5548P')
+        finally:
+            self.dev.disconnect()
 
         # Test that connection was redirected to the corresponding plugin
         with open(self.dev.logfile) as f:
             log_contents = f.read()
-        self.assertRegexpMatches(
+        self.assertRegex(
             log_contents,
             r'\+\+\+ Unicon plugin nxos/n5k( \(unicon\.plugins\.nxos\.n5k\))? \+\+\+'
         )
@@ -157,17 +189,20 @@ devices:
             "mock_device_cli --os generic --state iosxe_login2"
 
         # Test connection succeeds and tokens learned
-        self.dev.connect(learn_tokens=True, learn_hostname=True)
-        self.assertEqual(self.dev.os, 'iosxe')
-        self.assertEqual(self.dev.version, '15.2')
-        self.assertEqual(self.dev.platform, 'cat5k')
-        self.assertEqual(self.dev.model, 'c5000')
-        self.assertEqual(self.dev.pid, 'WS-C5002')
+        try:
+            self.dev.connect(learn_tokens=True, learn_hostname=True)
+            self.assertEqual(self.dev.os, 'iosxe')
+            self.assertEqual(self.dev.version, '15.2')
+            self.assertEqual(self.dev.platform, 'cat5k')
+            self.assertEqual(self.dev.model, 'c5000')
+            self.assertEqual(self.dev.pid, 'WS-C5002')
+        finally:
+            self.dev.disconnect()
 
         # Test that connection was redirected to the corresponding plugin
         with open(self.dev.logfile) as f:
             log_contents = f.read()
-        self.assertRegexpMatches(
+        self.assertRegex(
             log_contents,
             r'\+\+\+ Unicon plugin iosxe( \(unicon\.(internal\.)?plugins\.iosxe\))? \+\+\+'
         )
@@ -177,17 +212,65 @@ devices:
             "mock_device_cli --os generic --state connect_ssh"
 
         # Test connection succeeds and tokens learned
-        self.dev.connect(learn_tokens=True)
-        self.assertEqual(self.dev.os, 'linux')
-        self.assertEqual(self.dev.version, '4.18.0-240.22.1.el8_3.x86_64')
+        try:
+            self.dev.connect(learn_tokens=True)
+            self.assertEqual(self.dev.os, 'linux')
+            self.assertEqual(self.dev.version, '4.18.0-240.22.1.el8_3.x86_64')
+        finally:
+            self.dev.disconnect()
 
         # Test that connection was redirected to the corresponding plugin
         with open(self.dev.logfile) as f:
             log_contents = f.read()
-        self.assertRegexpMatches(
+        self.assertRegex(
             log_contents,
             r'\+\+\+ Unicon plugin linux( \(unicon(\.internal)?\.plugins\.linux\))? \+\+\+'
         )
+
+    def test_learn_tokens_conf_state(self):
+        self.dev.connections.cli.command = \
+            "mock_device_cli --os generic --state config"
+
+        # If this manages to connect, it was able to recover from the config
+        # state and learn tokens
+        try:
+            self.dev.connect(learn_tokens=True)
+        finally:
+            self.dev.disconnect()
+
+        self.assertEqual(self.dev.state_machine.current_state, "enable")
+
+    def test_iosxr_learn_tokens(self):
+        # Set up device to use correct mock_device data
+        self.dev.connections.cli.command = \
+            "mock_device_cli --os generic --state iosxr_login"
+
+        # Test connection succeeds and tokens learned
+        try:
+            self.dev.connect(learn_tokens=True, learn_hostname=True)
+            self.assertEqual(self.dev.os, 'iosxr')
+            self.assertEqual(self.dev.os_flavor, 'lnt')
+            self.assertEqual(self.dev.version, '5.2.3.12i')
+            self.assertEqual(self.dev.platform, 'iosxrv')
+        finally:
+            self.dev.disconnect()
+
+        # Test that connection was redirected to the corresponding plugin
+        with open(self.dev.logfile) as f:
+            log_contents = f.read()
+        self.assertRegex(
+            log_contents,
+            r'\+\+\+ Unicon plugin iosxr/iosxrv( \(unicon\.plugins\.iosxr\.iosxrv\))? \+\+\+'
+        )
+
+    def test_learn_tokens_failure_exception(self):
+        self.dev.connections.cli.command = 'bash -c "while :; do echo -n R1# && read resp; done"'
+        self.dev.connections.cli.settings['LEARN_DEVICE_TOKENS'] = True
+        try:
+            with self.assertRaises(LearnTokenError):
+                self.dev.connect(learn_tokens=True, learn_hostname=True)
+        finally:
+            self.dev.disconnect()
 
 
 class TestAbstractTokenDiscoveryStandardization(unittest.TestCase):
@@ -337,7 +420,7 @@ devices:
             'pid': 'ASR1001-2XOC3POS',
             'os': 'iosxe',
             'platform': 'asr1k',
-            'model': 'asr1000'
+            'model': 'asr1001'
         },
         tokens)
 
@@ -416,7 +499,7 @@ class TestAbstractTokenDiscoveryHAConnection(unittest.TestCase):
             self.assertEqual(dev.os, 'iosxe')
             self.assertEqual(dev.version, '16.7')
             self.assertEqual(dev.platform, 'asr1k')
-            self.assertEqual(dev.model, 'asr1000')
+            self.assertEqual(dev.model, 'asr1006')
             self.assertEqual(dev.pid, 'ASR1006')
 
 

@@ -617,6 +617,7 @@ ios_sw4_telnet:
 ios_sw4_exec:
   prompt: "Sw04>"
   commands:
+    "show version | include operating mode": ""
     "enable":
       new_state: ios_sw4_password
 
@@ -685,3 +686,16 @@ prompt_recovery:
     "":
       new_state: exec
 
+
+ansi_prompt:
+  prompt: "\x1b[37mapc>"
+  commands: *cmds
+
+
+slow_connection_exec:
+  preface:
+    response: ""
+    timing:
+     - 0:,15
+  prompt: "%N$ "
+  commands: *cmds

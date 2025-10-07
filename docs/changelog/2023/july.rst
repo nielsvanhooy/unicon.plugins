@@ -1,7 +1,7 @@
 July 2023
 ==========
 
-July 25 - Unicon v23.7 
+July 24 - Unicon v23.7
 ------------------------
 
 
@@ -9,8 +9,8 @@ July 25 - Unicon v23.7
 .. csv-table:: Module Versions
     :header: "Modules", "Versions"
 
-        ``unicon.plugins``, v23.7 
-        ``unicon``, v23.7 
+        ``unicon.plugins``, v23.7
+        ``unicon``, v23.7
 
 Install Instructions
 ^^^^^^^^^^^^^^^^^^^^
@@ -37,15 +37,25 @@ Features and Bug Fixes:
 Changelogs
 ^^^^^^^^^^
 --------------------------------------------------------------------------------
-                                      Fix                                       
+                                      Fix
 --------------------------------------------------------------------------------
 
 * patterns
     * Modified confirm prompt patterns to support Abort Copy
 
+
+--------------------------------------------------------------------------------
+                                      New
+--------------------------------------------------------------------------------
+
 * generic
     * attach_mdoule
         * add a debug flag to attach_mdoule for going to debug mode
+
+
+--------------------------------------------------------------------------------
+                                      Fix
+--------------------------------------------------------------------------------
 
 * iosxe
     * Change the regex for sw_num to ' \d '.

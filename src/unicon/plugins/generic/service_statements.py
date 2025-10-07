@@ -53,6 +53,8 @@ def login_handler(spawn, context, session):
     """
     credential = get_current_credential(context=context, session=session)
     if credential:
+        if credential != 'default':
+            spawn.log.info(f'Using {credential} credential set for login into device')
         common_cred_username_handler(
             spawn=spawn, context=context, credential=credential)
     else:
@@ -166,6 +168,11 @@ def copy_handler_1(spawn, context, send_key):
     else:
         raise SubCommandFailure("%s is not specified" % context[send_key])
 
+def copy_overwrite_handler(spawn, context):
+    if context['overwrite'] == 'False':
+        spawn.sendline('n')
+    else:
+        spawn.sendline('y')
 
 def copy_error_handler(context, retry=False):
     if retry:
@@ -242,6 +249,11 @@ reload_confirm_ios = Statement(pattern=reload_patterns.reload_confirm_ios,
                                loop_continue=True,
                                continue_timer=False)
 
+reload_confirm_iosxe = Statement(pattern=reload_patterns.reload_confirm_iosxe,
+                               action=send_response, args={'response': ''},
+                               loop_continue=True,
+                               continue_timer=False)
+
 useracess = Statement(pattern=reload_patterns.useracess,
                       action=None, args=None,
                       loop_continue=True,
@@ -263,7 +275,7 @@ confirm_config = Statement(pattern=reload_patterns.confirm_config,
                            continue_timer=False)
 
 setup_dialog = Statement(pattern=reload_patterns.setup_dialog,
-                         action=send_response, args={'response': 'n'},
+                         action=send_response, args={'response': 'no'},
                          loop_continue=True,
                          continue_timer=False)
 
@@ -332,8 +344,14 @@ config_session_locked_stmt = Statement(pattern=reload_patterns.config_session_lo
                                        loop_continue=False,
                                        continue_timer=False)
 
+eof_statement = Statement(pattern='__eof__',
+                          action=connection_closed_handler,
+                          args=None,
+                          loop_continue=False,
+                          continue_timer=False)
+
 reload_statement_list = [save_env, confirm_reset, reload_confirm,
-                         reload_confirm_ios, useracess,
+                         reload_confirm_ios, reload_confirm_iosxe, useracess,
                          confirm_config, setup_dialog, auto_install_dialog,
                          module_reload, save_module_cfg, reboot_confirm,
                          secure_passwd_std, admin_password, auto_provision,
@@ -343,7 +361,8 @@ reload_statement_list = [save_env, confirm_reset, reload_confirm,
                          generic_statements.syslog_msg_stmt,
                          # Below statements have loop_continue=False
                          password_stmt, press_enter, press_return,
-                         connection_closed_stmt
+                         connection_closed_stmt, eof_statement,
+                         generic_statements.enter_your_encryption_selection_stmt
                          ]
 
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
@@ -949,8 +968,8 @@ rcp_confirm = Statement(pattern=pat.rcp_confirm,
                         continue_timer=True)
 # Recheck this
 copy_overwrite = Statement(pattern=pat.copy_overwrite,
-                           action=send_response,
-                           args={'response': 'y'},
+                           action=copy_overwrite_handler,
+                           args=None,
                            loop_continue=True,
                            continue_timer=True)
 

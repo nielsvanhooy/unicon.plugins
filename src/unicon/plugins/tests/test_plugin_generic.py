@@ -8,6 +8,7 @@ __author__ = "Dave Wapstra <dwapstra@cisco.com>"
 import os
 import re
 import time
+import logging
 import unittest
 from unittest.mock import Mock, call, patch
 from concurrent.futures import ThreadPoolExecutor
@@ -159,6 +160,7 @@ class TestCredentialLoginPasswordHandlers(unittest.TestCase):
             print("Sendline called with: %s %s" % (args, kwargs))
 
         self.spawn = MockSpawn()
+        self.spawn.log = Mock()
         self.spawn.spawn_command = 'ssh -l cisco@router'
         self.spawn.last_sent = 'ssh -l cisco@router'
         self.spawn.sendline = Mock(side_effect=mock_sendline)
@@ -293,7 +295,7 @@ class TestCredentialLoginPasswordHandlers(unittest.TestCase):
                        connection_timeout=15,
                        credentials=credentials
                        )
-        with self.assertRaises(ConnectionError):
+        with self.assertRaises(CredentialsExhaustedError):
             d.connect()
 
         d = Connection(hostname='Router',
@@ -302,7 +304,7 @@ class TestCredentialLoginPasswordHandlers(unittest.TestCase):
                        connection_timeout=15,
                        credentials=credentials
                        )
-        with self.assertRaises(ConnectionError):
+        with self.assertRaises(CredentialsExhaustedError):
             d.connect()
 
     def test_enable_password_explicit(self):
@@ -386,7 +388,7 @@ class TestCredentialLoginPasswordHandlers(unittest.TestCase):
                        connection_timeout=15,
                        credentials=credentials,
                        login_creds='mycred')
-        with self.assertRaises(ConnectionError):
+        with self.assertRaises(CredentialsExhaustedError):
             d.connect()
 
         d = Connection(hostname='Router',
@@ -395,7 +397,7 @@ class TestCredentialLoginPasswordHandlers(unittest.TestCase):
                        connection_timeout=15,
                        credentials=credentials,
                        login_creds='mycred')
-        with self.assertRaises(ConnectionError):
+        with self.assertRaises(CredentialsExhaustedError):
             d.connect()
 
     def test_connect_ssh_passphrase(self):
@@ -426,7 +428,7 @@ class TestCredentialLoginPasswordHandlers(unittest.TestCase):
                        init_exec_commands=[],
                        init_config_commands=[])
 
-        with self.assertRaises(ConnectionError):
+        with self.assertRaises(UniconAuthenticationError):
             d.connect()
 
 
@@ -487,7 +489,7 @@ class TestGenericServices(unittest.TestCase):
         cmd = 'do show version'
         cmd_list = ['do show version', 'do show version']
         ret = self.ha_device.configure(cmd_list)
-        test_output =  ret.replace('\r\n', '\n')
+        test_output =  ret.replace('\r', '')
         single_cmd_output = cmd + '\n' + self.md.mock_data['exec']['commands']['show version']
         self.maxDiff = None
         expected_output = single_cmd_output + single_cmd_output
@@ -867,6 +869,36 @@ class TestExecuteService(unittest.TestCase):
         finally:
             self.d.execute.matched_retry_sleep = \
                 self.d.settings.EXECUTE_MATCHED_RETRY_SLEEP
+
+
+class TestServiceLogging(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        testbed = """
+        devices:
+          R1:
+            os: iosxe
+            alias: uut
+            connections:
+              defaults:
+                class: unicon.Unicon
+              a:
+                command: mock_device_cli --os iosxe --state general_enable --hostname R1
+        """
+        t = loader.load(testbed)
+        cls.d = t.devices.uut
+        cls.d.connect(mit=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.d.disconnect()
+
+    def test_execute_logging(self):
+        self.maxDiff = None
+        with self.assertLogs(self.d.log.name, logging.INFO) as cm:
+            self.d.execute('show version')
+            self.assertIn("R1(alias=uut) with via 'a'", cm.output[0])
 
 
 class TestTransmitReceive(unittest.TestCase):
@@ -1446,6 +1478,47 @@ class TestGenericConnectionRefused(unittest.TestCase):
                 d.disconnect()
                 md.stop()
 
+    def test_connection_refused_handler_repeat(self):
+        md = MockDeviceTcpWrapper(device_os='iosxe', hostname='R1',
+            port=0, state='connection_refused_loop')
+        md.start()
+        template_testbed = """
+        devices:
+          R1:
+            os: iosxe
+            credentials:
+                default:
+                    username: cisco
+                    password: cisco
+            connections:
+              defaults:
+                class: unicon.Unicon
+              a:
+                protocol: telnet
+                ip: 127.0.0.1
+                port: {}
+            peripherals:
+                terminal_server:
+                    ts: [20]
+          ts:
+            os: ios
+            credentials:
+                default:
+                    username: cisco
+                    password: cisco
+            connections:
+                cli:
+                    command: mock_device_cli --os ios --state exec --hostname ts
+        """.format(md.ports[0])
+        t = loader.load(template_testbed)
+        d = t.devices.R1
+        with self.assertRaisesRegex(unicon.core.errors.ConnectionError,
+                'failed to connect to R1'):
+            try:
+                d.connect()
+            finally:
+                d.disconnect()
+                md.stop()
 
 
 if __name__ == "__main__":

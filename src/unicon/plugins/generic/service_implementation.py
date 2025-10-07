@@ -20,6 +20,7 @@ import logging
 import collections
 import ipaddress
 from itertools import chain
+import time
 import warnings
 from datetime import datetime, timedelta
 
@@ -27,7 +28,7 @@ from time import sleep
 
 from unicon.bases.routers.services import BaseService
 from unicon.core.errors import SubCommandFailure, StateMachineError, \
-    CopyBadNetworkError, TimeoutError
+    CopyBadNetworkError, TimeoutError, UniconBackendDecodeError
 from unicon.eal.dialogs import Dialog
 from unicon.eal.dialogs import Statement
 from unicon.plugins.generic.statements import (
@@ -490,6 +491,7 @@ class Enable(BaseService):
         handle = self.get_handle(target)
         spawn = self.get_spawn(target)
         sm = self.get_sm(target)
+        timeout = kwargs.get('timeout', None)
 
         # If the device is in rommon, enable() will use the
         # image_to_boot info to boot the image specified
@@ -507,7 +509,8 @@ class Enable(BaseService):
         try:
             sm.go_to(self.start_state,
                      spawn,
-                     context=handle.context)
+                     context=handle.context,
+                     timeout=timeout)
         except Exception as err:
             raise SubCommandFailure("Failed to Bring device to Enable State",
                                     err) from err
@@ -717,14 +720,10 @@ class Execute(BaseService):
 
         command_output = {}
         for command in commands:
-            via = con.via
-            alias = con.alias if hasattr(con, 'alias') and con.alias != 'cli' else None
-            if alias and via:
-                con.log.info("+++ %s with via '%s' and alias '%s': executing command '%s' +++" % (con.hostname, via, alias, command))
-            elif via:
-                con.log.info("+++ %s with via '%s': executing command '%s' +++" % (con.hostname, via, command))
-            else:
-                con.log.info("+++ %s: executing command '%s' +++" % (con.hostname, command))
+
+            message = f"executing command '{command}'"
+            super().log_service_call(message)
+
             con.sendline(command)
             try:
                 dialog_match = dialog.process(
@@ -739,6 +738,8 @@ class Execute(BaseService):
                 sm.detect_state(con.spawn, con.context)
             except StateMachineError:
                 raise
+            except UniconBackendDecodeError:
+                pass
             except Exception as err:
                 raise SubCommandFailure("Command execution failed", err) from err
 
@@ -752,7 +753,7 @@ class Execute(BaseService):
                 output = self.extra_output_process(output)
                 output = output.replace(command, "", 1)
                 # only strip first newline and leave formatting intact
-                output = re.sub(r"^\r?\r\n", "", output, 1)
+                output = re.sub(r"^\r?\r\n", "", output, count=1)
                 output = output.rstrip()
 
                 if command in command_output:
@@ -809,6 +810,8 @@ class Configure(BaseService):
                           0 means to send all commands in a single chunk
         bulk_chunk_sleep: sleep between sending command chunks,
                           default is 0.5 sec
+        result_check_per_command: boolean option, check results after
+                                  each command (default: True)
 
     Returns:
         command output on Success, raise SubCommandFailure on failure
@@ -833,6 +836,7 @@ class Configure(BaseService):
         self.bulk_chunk_lines = connection.settings.BULK_CONFIG_CHUNK_LINES
         self.bulk_chunk_sleep = connection.settings.BULK_CONFIG_CHUNK_SLEEP
         self.valid_transition_commands = ['end', 'exit']
+        self.valid_transition_states = ['config_pki_hexmode']
         self.state_change_matched_retries = connection.settings.EXECUTE_STATE_CHANGE_MATCH_RETRIES
         self.state_change_matched_retry_sleep = connection.settings.EXECUTE_STATE_CHANGE_MATCH_RETRY_SLEEP
         self.__dict__.update(kwargs)
@@ -875,9 +879,11 @@ class Configure(BaseService):
                      bulk=None,
                      bulk_chunk_lines=None,
                      bulk_chunk_sleep=None,
+                     result_check_per_command=True,
                      *args,
                      **kwargs):
 
+        self.result_check_per_command = result_check_per_command
         con = self.connection
         sm = self.get_sm()
         handle = self.get_handle(target)
@@ -908,7 +914,9 @@ class Configure(BaseService):
 
         def config_state_change(spawn, from_state, sm):
             last_cmd = spawn.last_sent.strip()
-            if last_cmd not in self.valid_transition_commands:
+            # check if the last command is not in the list of valid commands and the state is not in the list of valid states
+            # for transition
+            if last_cmd not in self.valid_transition_commands and from_state.name not in self.valid_transition_states:
                 invalid_state_change_action(
                     spawn, err_state=from_state, sm=sm)
             else:
@@ -1016,20 +1024,21 @@ class Configure(BaseService):
             hostname=handle.hostname,
             result_match=cmd_result)
         self.result += cmd_result
-        try:
-            self.get_service_result()
-        except SubCommandFailure:
-            # Go to end state after command failure,
-            handle.state_machine.go_to(self.end_state,
-                                       handle.spawn,
-                                       context=self.context)
-            raise
+        if self.result_check_per_command:
+            try:
+                self.get_service_result()
+            except SubCommandFailure:
+                # Go to end state after command failure,
+                handle.state_machine.go_to(self.end_state,
+                                        handle.spawn,
+                                        context=self.context)
+                raise
 
     def update_hostname_if_needed(self, cmd_list):
         for cmd in cmd_list:
-            m = re.match(r'^\s*hostname (\S+)', cmd)
+            m = re.match(r'^\s*(hostname|switchname) (\S+)', cmd)
             if m:
-                self.connection.hostname = m.group(1)
+                self.connection.hostname = m.group(2)
                 return
 
 
@@ -1074,9 +1083,6 @@ class Reload(BaseService):
         self.timeout = connection.settings.RELOAD_TIMEOUT
         self.dialog = Dialog(reload_statement_list + default_statement_list)
         self.log_buffer = io.StringIO()
-        lb = UniconStreamHandler(self.log_buffer)
-        lb.setFormatter(logging.Formatter(fmt=UNICON_LOG_FORMAT))
-        self.connection.log.addHandler(lb)
         self.__dict__.update(kwargs)
 
     def call_service(self,
@@ -1089,16 +1095,24 @@ class Reload(BaseService):
                      raise_on_error=True,
                      error_pattern=None,
                      append_error_pattern=None,
+                     post_reload_wait_time = None,
                      *args, **kwargs):
-
 
         con = self.connection
         timeout = timeout or self.timeout
+
+        syslog_wait = con.settings.SYSLOG_WAIT
+        con.settings.SYSLOG_WAIT = con.settings.RELOAD_SYSLOG_WAIT
 
         if error_pattern is None:
             self.error_pattern = con.settings.ERROR_PATTERN
         else:
             self.error_pattern = error_pattern
+
+        if post_reload_wait_time is None:
+            self.post_reload_wait_time = con.settings.POST_RELOAD_WAIT
+        else:
+            self.post_reload_wait_time = post_reload_wait_time
 
         if not isinstance(self.error_pattern, list):
             raise ValueError('error_pattern should be a list')
@@ -1106,6 +1120,10 @@ class Reload(BaseService):
             if not isinstance(append_error_pattern, list):
                 raise ValueError('append_error_pattern should be a list')
             self.error_pattern += append_error_pattern
+
+        lb = UniconStreamHandler(self.log_buffer)
+        lb.setFormatter(logging.Formatter(fmt=UNICON_LOG_FORMAT))
+        self.connection.log.addHandler(lb)
 
         # Clear log buffer
         self.log_buffer.seek(0)
@@ -1152,13 +1170,19 @@ class Reload(BaseService):
                             context=context)
             self.result = reload_output.match_output
             self.get_service_result()
-        except TimeoutError:
-            if raise_on_error:
+        except Exception as e:
+            if hasattr(con.device, 'clean') and hasattr(con.device.clean, 'device_recovery') and\
+                con.device.clean.device_recovery.get('golden_image'):
+                    con.log.exception(f"Reload failed to install with file: {getattr(con.device.clean, 'images', [None])[0]}")
+                    con.log.info(f'Booting the device using golden_image.')
+                    con.device.api.device_recovery_boot(golden_image=con.device.clean.device_recovery['golden_image'])
+                    con.log.info('Successfully booted the device using golden_image.')
+                    raise
+            elif raise_on_error:
                 raise
             else:
-                con.log.exception('Reload timed out')
+                con.log.exception(f'Reload failed: {e}')
                 self.result = False
-
         if not con.connected:
             con.disconnect()
             for x in range(con.settings.RELOAD_RECONNECT_ATTEMPTS):
@@ -1175,12 +1199,12 @@ class Reload(BaseService):
                     break
         else:
             con.log.info('Waiting for boot messages to settle for {} seconds'.format(
-                con.settings.POST_RELOAD_WAIT
+                self.post_reload_wait_time
             ))
-            wait_time = timedelta(seconds=con.settings.POST_RELOAD_WAIT)
+            wait_time = timedelta(seconds=self.post_reload_wait_time)
             settle_time = current_time = datetime.now()
             while (current_time - settle_time) < wait_time:
-                if buffer_settled(con.spawn, con.settings.POST_RELOAD_WAIT):
+                if buffer_settled(con.spawn, self.post_reload_wait_time):
                     con.log.info('Buffer settled, accessing device..')
                     break
                 current_time = datetime.now()
@@ -1188,6 +1212,12 @@ class Reload(BaseService):
                     con.log.info('Time out, trying to acces device..')
                     break
 
+            # ! This line was added to resolve an issue with HA devices, but was
+            # ! found to cause further issues with other devices on reload
+            # TODO Need to find a better way to implement a fix for HA devices
+            # TODO that does not cause issues with other devices. Likely need to
+            # TODO modify the state machine and/or dialog processing.
+            # con.sendline()
         try:
             con.context = context
             con.connection_provider.connect()
@@ -1199,10 +1229,14 @@ class Reload(BaseService):
                 con.log.exception('Connection to {} failed'.format(con.hostname))
                 self.result = False
 
+        con.settings.SYSLOG_WAIT = syslog_wait
+
         self.log_buffer.seek(0)
         reload_output = self.log_buffer.read()
         # clear buffer
         self.log_buffer.truncate()
+
+        self.connection.log.removeHandler(lb)
 
         if return_output:
             self.result = ReloadResult(self.result, reload_output)
@@ -1551,7 +1585,9 @@ class Copy(BaseService):
             elif a == "erase":
                 copy_context[a] = "n"
             elif a == 'overwrite':
-                copy_context[a] = True
+                # To Handle overwrite = False condition 
+                overwrite = kwargs.get('overwrite', True)
+                copy_context[a] = overwrite
             elif a == 'vrf':
                 copy_context[a] = "Mgmt-intf"
             elif a == 'timeout':
@@ -1635,6 +1671,9 @@ class Copy(BaseService):
         for retry_num in range(self.max_attempts):
             spawn.sendline(copy_string)
             try:
+                if (sleep_time := kwargs.get('sleep_time')):
+                    con.log.info(f"sleep for {sleep_time} seconds")
+                    time.sleep(sleep_time)
                 self.result = dialog.process(spawn,
                                              context=copy_context,
                                              timeout=timeout)
@@ -2017,6 +2056,7 @@ class HAReloadService(BaseService):
         self.timeout = connection.settings.HA_RELOAD_TIMEOUT
         self.dialog = Dialog(ha_reload_statement_list + default_statement_list)
         self.command = 'reload'
+        self.log_buffer = io.StringIO()
         self.__dict__.update(kwargs)
 
     def call_service(self,  # noqa: C901
@@ -2048,6 +2088,18 @@ class HAReloadService(BaseService):
             if not isinstance(append_error_pattern, list):
                 raise ValueError('append_error_pattern should be a list')
             self.error_pattern += append_error_pattern
+
+        lb = UniconStreamHandler(self.log_buffer)
+        lb.setFormatter(logging.Formatter(fmt=UNICON_LOG_FORMAT))
+        self.connection.log.addHandler(lb)
+
+        # logging the output to subconnections
+        for subcon in con.subconnections:
+            subcon.log.addHandler(lb)
+
+        # Clear log buffer
+        self.log_buffer.seek(0)
+        self.log_buffer.truncate()
 
         if reply:
             if dialog:
@@ -2096,6 +2148,7 @@ class HAReloadService(BaseService):
                                            prompt_recovery=self.prompt_recovery,
                                            timeout=timeout)
             self.result=reload_output.match_output
+
             self.get_service_result()
 
             con.active.state_machine.go_to('any',
@@ -2139,7 +2192,12 @@ class HAReloadService(BaseService):
                 )
 
         except Exception as err:
-            raise SubCommandFailure("Reload failed : %s" % err) from err
+            if hasattr(con.device, 'clean') and hasattr(con.device.clean, 'device_recovery') and\
+                con.device.clean.device_recovery.get('golden_image'):
+                con.log.error(f'Reload failed booting device using golden image: {con.device.clean.device_recovery["golden_image"]}')
+                con.device.api.device_recovery_boot(golden_image=con.device.clean.device_recovery['golden_image'])
+                con.log.info(f'Successfully booted the device using golden image.')
+            raise SubCommandFailure(f"Reload failed : {err}")
 
         # Re-designate handles before applying config.
         # Roles could have switched as a result of the reload.
@@ -2190,6 +2248,15 @@ class HAReloadService(BaseService):
                 counter += 1
 
         con.log.info("+++ Reload Completed Successfully +++")
+        self.log_buffer.seek(0)
+        reload_output = self.log_buffer.read()
+        # clear buffer
+        self.log_buffer.truncate()
+
+        self.connection.log.removeHandler(lb)
+        for subcon in con.subconnections:
+            subcon.log.removeHandler(lb)
+
         self.result = True
         if return_output:
             self.result = ReloadResult(self.result, reload_output)
@@ -2291,14 +2358,8 @@ class SwitchoverService(BaseService):
         except SubCommandFailure as err:
             raise SubCommandFailure("Switchover Failed %s" % str(err)) from err
 
-        # Initialise Standby
-        try:
-            con.standby.spawn.sendline("\r")
-            con.standby.spawn.expect(".*")
-            con.swap_roles()
-        except Exception as err:
-            raise SubCommandFailure("Failed to initialise the standby",
-                                    err) from err
+        # swap roles after switchover
+        con.swap_roles()
 
         counter = 0
         if not sync_standby:
@@ -2348,16 +2409,21 @@ class SwitchoverService(BaseService):
             config_commands = self.connection.settings.HA_INIT_CONFIG_COMMANDS
             con.configure(config_commands, prompt_recovery=self.prompt_recovery)
 
-            # Determine standby state
-            con.standby.spawn.sendline()
-            try:
-                con.standby.state_machine.go_to('any',
-                                                con.standby.spawn,
-                                                context=con.standby.context,
-                                                dialog=con.connection_provider.get_connection_dialog())
-            except Exception:
-                con.log.error("Failed to bring standby rp to any state")
-                raise
+            # Try to determine state for to standby node,
+            # if first attempt fails, sendline and check again
+            for _ in range(2):
+                # Determine standby state
+                try:
+                    con.standby.state_machine.go_to('any',
+                                                    con.standby.spawn,
+                                                    context=con.standby.context,
+                                                    dialog=con.connection_provider.get_connection_dialog())
+                    break
+                except Exception:
+                    con.log.error("Failed to bring standby rp to any state")
+                    con.standby.spawn.sendline()
+            else:
+                raise Exception("Failed to bring standby rp to any state")
 
             con.enable(target='standby')
         # Verify switchover is Successful
@@ -2443,7 +2509,8 @@ class ResetStandbyRP(BaseService):
             raise SubCommandFailure("Standby found but not in the expected state")
 
         dialog = self.service_dialog(handle=con.active,
-                                     service_dialog=self.dialog)
+                                     service_dialog=self.dialog+reply)
+
         # Issue standby reset command
         con.active.spawn.sendline(command)
         try:
@@ -2581,6 +2648,20 @@ class BashService(BaseService):
             # do not suppress
             return False
 
+        def parse(self, *args, **kwargs):
+            abstract_args = kwargs.setdefault('abstract', {})
+            device = getattr(self.conn, 'device', None)
+            if device:
+                abstract_args.update(dict(
+                    os=[device.os, 'linux'],
+                    platform=device.platform,
+                    model=device.model,
+                    pid=device.pid,
+                ))
+                return self.conn.device.parse(*args, **kwargs)
+            else:
+                self.conn.log.warning('No device object, parse method unavailable')
+
         def __getattr__(self, attr):
             if attr in ('execute', 'sendline', 'send', 'expect'):
                 return getattr(self.conn, attr)
@@ -2606,7 +2687,7 @@ class AttachModuleService(BaseService):
             with rtr.attach(1) as m:
                 m.execute('show interface')
                 m.execute(['show interface 1', 'show interface 2'])
-            # if we want to go to module_debug state
+            # if we want to go to lc_shell state
             with rtr.attach(1, debug=True) as m:
                 m.execute('show interface')
                 m.execute(['show interface 1', 'show interface 2'])
@@ -2667,7 +2748,7 @@ class AttachModuleService(BaseService):
                 raise NotImplementedError('Attach module state not implemented')
 
             self.conn.log.debug('+++ attaching module +++')
-            conn.state_machine.go_to('module_debug' if self.debug else 'module',
+            conn.state_machine.go_to('lc_shell' if self.debug else 'module',
                                      conn.spawn,
                                      context=self.context,
                                      timeout=self.timeout)

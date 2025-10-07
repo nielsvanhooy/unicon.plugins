@@ -9,6 +9,7 @@ __author__ = "Dave Wapstra <dwapstra@cisco.com>"
 
 import os
 import unittest
+from textwrap import dedent
 from unittest.mock import patch
 
 import unicon
@@ -140,6 +141,17 @@ class TestIosXrPlugin(unittest.TestCase):
         self.assertEqual(c.spawn.match.match_output, 'end\r\nRP/B0/CB0/CPU0:KLMER02-SU1#')
         c.disconnect()
 
+    def test_connect_unresponsive(self):
+        con = Connection(
+                hostname='R1',
+                os='iosxr',
+                start=['mock_device_cli --os iosxr --state unresponsive_prompt --hostname R1'],
+                credentials=dict(default=dict(username='admin', password='admin')))
+        try:
+            con.connect()
+        finally:
+            con.disconnect()
+
 
 class TestIosXRPluginExecute(unittest.TestCase):
     @classmethod
@@ -189,6 +201,8 @@ class TestIosXrConfigPrompts(unittest.TestCase):
             hostname='Router',
             start=['mock_device_cli --os iosxr --state enable'],
             os='iosxr',
+            mit=True,
+            log_buffer=True
         )
         self._conn.connect()
 
@@ -197,6 +211,25 @@ class TestIosXrConfigPrompts(unittest.TestCase):
         self._conn.execute("configure terminal", allow_state_change=True)
         self._conn.execute("test failed")
         self._conn.spawn.timeout = 60
+        self._conn.enable()
+
+    def test_failed_config_error_message1(self):
+        """Check that we can successfully return to an enable prompt after entering failed config."""
+        with self.assertRaisesRegex(unicon.core.errors.SubCommandFailure, "% Invalid config"):
+            self._conn.configure("test failed")
+
+    def test_failed_config_error_message2(self):
+        """Check that we can successfully return to an enable prompt after entering failed config."""
+        with self.assertRaisesRegex(unicon.core.errors.SubCommandFailure, "% Invalid config"):
+            self._conn.configure("test failed2")
+
+    def test_update_hostname(self):
+        self.assertEqual('Router', self._conn.hostname)
+        self._conn.configure('hostname R2')
+        self.assertEqual('R2', self._conn.hostname)
+
+    def test_config_syslog(self):
+        self._conn.execute('config_syslog', allow_state_change=True)
         self._conn.enable()
 
 
@@ -215,6 +248,16 @@ class TestIosXrPluginAdminService(unittest.TestCase):
         self.assertIn('exit', ret)
         self.assertIn('Router#', ret)
 
+    def test_admin_host(self):
+        conn = Connection(hostname='Router',
+                          start=['mock_device_cli --os iosxr --state enable6'],
+                          os='iosxr',
+                          enable_password='cisco',
+                          mit=True)
+
+        conn.connect()
+        with conn.admin_bash_console() as console:
+            console.execute('ssh 10.0.2.16', allow_state_change=True)
 
 class TestIosXrPluginBashService(unittest.TestCase):
 
@@ -324,6 +367,20 @@ class TestIosXrPluginBashService(unittest.TestCase):
         self.assertIn('exit', ret)
         self.assertIn('Router#', ret)
         conn.disconnect()
+
+    def test_admin_host_ios(self):
+        conn = Connection(hostname='Router',
+                          start=['mock_device_cli --os iosxr --state bash_console7'],
+                          os='iosxr',
+                          mit=True,
+                          log_buffer=True)
+
+        conn.connect()
+        try:
+            conn.execute('run ssh 10.0.2.16', allow_state_change=True)
+            self.assertEqual(conn.state_machine.current_state, 'admin_host')
+        finally:
+            conn.disconnect()
 
 
 @patch.object(unicon.settings.Settings, 'POST_DISCONNECT_WAIT_SEC', 0)
@@ -527,6 +584,12 @@ class TestIosxrConfigCommitCommands(unittest.TestCase):
         self.assertEqual(self.conn.configure.commit_cmd, 'commit replace')
         self.assertEqual(self.ha_dev.configure.commit_cmd, 'commit replace')
 
+    def test_config_commit_best_effort(self):
+        self.conn.configure('no logging console', best_effort=True)
+        self.ha_dev.configure('no logging console', best_effort=True)
+        self.assertEqual(self.conn.configure.commit_cmd, 'commit best-effort')
+        self.assertEqual(self.ha_dev.configure.commit_cmd, 'commit best-effort')
+
     def test_config_commit_force(self):
         self.conn.configure('no logging console', force=True)
         self.ha_dev.configure('no logging console', force=True)
@@ -652,6 +715,133 @@ class TestIosXrPluginReload(unittest.TestCase):
         finally:
             c.disconnect()
             md.stop()
+
+    def test_reload_wish_continue(self):
+        conn = Connection(hostname='Router',
+                          start=['mock_device_cli --os iosxr --state enable7'],
+                          os='iosxr',
+                          enable_password='cisco',
+                          mit=True,
+                          settings=dict(POST_RELOAD_WAIT=1))
+        try:
+            conn.connect()
+            conn.reload()
+        finally:
+            conn.disconnect()
+
+
+class TestMorePrompt(unittest.TestCase):
+
+    def test_more_prompt(self):
+        c = Connection(
+            hostname="Router",
+            start=["mock_device_cli --os iosxr --state enable"],
+            os="iosxr",
+            init_exec_commands=[],
+            init_config_commands=[],
+            settings=dict(POST_DISCONNECT_WAIT_SEC=0, GRACEFUL_DISCONNECT_WAIT_SEC=0.2),
+        )
+        c.connect()
+        try:
+            output = c.execute("show command with more")
+            self.assertEqual(c.state_machine.current_state, "enable")
+            self.assertEqual(output, ' \r\noutput1\r\n \r\noutput2' )
+        finally:
+            c.disconnect()
+
+
+class TestXRMonitorCommand(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.conn = Connection(hostname='Router',
+                          start=['mock_device_cli --os iosxr --state enable'],
+                          os='iosxr',
+                          enable_password='cisco',
+                          mit=True)
+        cls.conn.connect()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.disconnect()
+
+    def test_monitor_interface_iface(self):
+        conn = self.conn
+        output = None
+        conn.monitor('interface eth0')
+        o = conn.monitor('clear')
+        self.assertEqual(o, "c\r\nBrief='b', Detail='d', Protocol(IPv4/IPv6)='r'")
+        output = conn.monitor.stop()
+
+        self.maxDiff = None
+
+        self.assertEqual(output.replace('\r', '').strip(), dedent("""\
+            monitor interface eth0
+            R1                   Monitor Time: 00:00:02          SysUptime: 22:48:09
+
+            FourHundredGigE0/0/0/2 is up, line protocol is up
+            Encapsulation ARPA
+
+            Traffic Stats:(2 second rates)                                     Delta
+              Input  Packets:                      2733                            0
+
+            Quit='q', Freeze='f', Thaw='t', Clear='c', Interface='i',
+            Next='n', Prev='p'
+            Brief='b', Detail='d', Protocol(IPv4/IPv6)='r'
+            c
+            Brief='b', Detail='d', Protocol(IPv4/IPv6)='r'
+            q"""))
+
+    def test_monitor_interface(self):
+        conn = self.conn
+        output = None
+        conn.monitor('interface')
+        output = conn.monitor.stop()
+        self.assertEqual(output.replace('\r', '').strip(), dedent("""\
+            monitor interface
+            R1                   Monitor Time: 00:00:02          SysUptime: 22:48:09
+
+            Quit='q',     Clear='c',    Freeze='f', Thaw='t',
+            Next set='n', Prev set='p', Bytes='y',  Packets='k'
+            (General='g', IPv4 Uni='4u', IPv4 Multi='4m', IPv6 Uni='6u', IPv6 Multi='6m')
+            q"""))
+
+    def test_monitor_not_supported(self):
+        conn = self.conn
+        with self.assertRaises(SubCommandFailure):
+            conn.monitor('something else')
+
+    def test_monitor_tail(self):
+        conn = self.conn
+        conn.monitor('interface')
+        output = conn.monitor.tail(timeout=3)
+        self.assertEqual(output.replace('\r', '').strip(), dedent("""\
+            monitor interface
+            R1                   Monitor Time: 00:00:02          SysUptime: 22:48:09
+
+            Quit='q',     Clear='c',    Freeze='f', Thaw='t',
+            Next set='n', Prev set='p', Bytes='y',  Packets='k'
+            (General='g', IPv4 Uni='4u', IPv4 Multi='4m', IPv6 Uni='6u', IPv6 Multi='6m')"""))
+
+    def test_monitor_general(self):
+        conn = self.conn
+        conn.monitor('interface')
+        output = conn.monitor('next set')
+        expected_output = "n\r\n(General='g', IPv4 Uni='4u', IPv4 Multi='4m', IPv6 Uni='6u', IPv6 Multi='6m')"
+        self.assertEqual(output, expected_output)
+
+        output = conn.monitor('general')
+        expected_output = "g\r\n(General='g', IPv4 Uni='4u', IPv4 Multi='4m', IPv6 Uni='6u', IPv6 Multi='6m')"
+        self.assertEqual(output, expected_output)
+
+        output = conn.monitor('IPv4 Uni')
+        expected_output = "4u\r\n(General='g', IPv4 Uni='4u', IPv4 Multi='4m', IPv6 Uni='6u', IPv6 Multi='6m')"
+        self.assertEqual(output, expected_output)
+
+        output = conn.monitor('ipv4uni')
+        expected_output = "4u\r\n(General='g', IPv4 Uni='4u', IPv4 Multi='4m', IPv6 Uni='6u', IPv6 Multi='6m')"
+        self.assertEqual(output, expected_output)
+
 
 
 if __name__ == "__main__":

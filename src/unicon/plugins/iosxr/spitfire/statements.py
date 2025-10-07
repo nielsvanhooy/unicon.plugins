@@ -46,6 +46,8 @@ def xr_login_handler(spawn, context, session):
     """
     credential = get_current_credential(context=context, session=session)
     if credential:
+        if credential != 'default':
+            spawn.log.info(f'Using {credential} credential set to login into device')
         common_cred_username_handler(spawn=spawn, context=context, credential=credential)
     else:
         spawn.sendline(context['username'])
@@ -61,6 +63,11 @@ def bmc_login_handler(spawn, context, session):
         common_cred_username_handler(spawn=spawn, context=context, credential=credential)
     else:
         spawn.sendline(context['bmc_username'])
+
+def showtech_graceful_exit_handler(spawn, context, session):
+    """ handles showtech graceful exit prompt
+    """
+    spawn.sendline('Y')
 
 
 class SpitfireStatements(GenericStatements):
@@ -90,6 +97,12 @@ class SpitfireStatements(GenericStatements):
                                               args={'reuse_current_credential': True},
                                               loop_continue=True,
                                               continue_timer=False)
+
+        self.showtech_graceful_exit_stmt = Statement(pattern=patterns.showtech_graceful_exit,
+                                                     action=showtech_graceful_exit_handler,
+                                                     args=None,
+                                                     loop_continue=True,
+                                                     continue_timer=False)
 
 
 spitfire_statements = SpitfireStatements()

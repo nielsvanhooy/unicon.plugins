@@ -1,16 +1,16 @@
 July 2023
-==========
+=========
 
-July 25 - Unicon.Plugins v23.7 
-------------------------
+July 24 - Unicon.Plugins v23.7
+------------------------------
 
 
 
 .. csv-table:: Module Versions
     :header: "Modules", "Versions"
 
-        ``unicon.plugins``, v23.7 
-        ``unicon``, v23.7 
+        ``unicon.plugins``, v23.7
+        ``unicon``, v23.7
 
 Install Instructions
 ^^^^^^^^^^^^^^^^^^^^
@@ -37,7 +37,7 @@ Features and Bug Fixes:
 Changelogs
 ^^^^^^^^^^
 --------------------------------------------------------------------------------
-                                      Fix                                       
+                                      Fix
 --------------------------------------------------------------------------------
 
 * iosxe

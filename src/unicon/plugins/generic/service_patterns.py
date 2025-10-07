@@ -25,6 +25,7 @@ class ReloadPatterns(UniconCorePatterns):
         self.admin_password = r'^.*(Enter|Confirm) the password for .*admin'
         self.auto_provision = r'Abort( Power On)? Auto Provisioning .*:'
         self.reload_confirm_ios = r'^.*Proceed( with( quick)? reload)?\?\s*\[confirm\]'
+        self.reload_confirm_iosxe = r'^.*Do you wish to proceed with reload anyway\s*\[confirm\]\s*'
         self.reload_confirm = r'^.*Reload node\s*\?\s*\[no,yes\]\s?$'
         self.reload_confirm_nxos = r'^(.*)This command will reboot the system.\s*\(y\/n\)\?\s*\[n\]\s?$'
         self.connection_closed = r'^(.*?)Connection.*? closed|disconnect: Broken pipe'
@@ -155,11 +156,11 @@ class CopyPatterns():
         self.copy_proceed = r'^.*bytes.*proceed\?.*$'
         self.tftp_addr =r'^.*Address or name of remote host \[\]\?\s*$'
         self.copy_complete = r'^.*bank [0-9]+'
-        self.copy_error_message = r'fail|timed out|Timed out|Error|Login incorrect|denied|Problem' \
+        self.copy_error_message = r'\bfail\b|timed out|Timed out|Error|Login incorrect|denied|Problem' \
                                   r'|NOT|Invalid|No memory|Failed(?! to generate persistent self-signed certificate)|mismatch|Bad|bogus|lose|abort' \
                                   r'|Not |too big|exceeds|detected|[Nn]o route to host' \
                                   r'|image is not allowed|Could not resolve|No such'
-        self.copy_retry_message = r'fail|[Tt]imed out|Error|Problem|NOT|Failed(?! to generate persistent self-signed certificate)|Bad|bogus|lose|abort|Not |too big|exceeds|detected'
+        self.copy_retry_message = r'\bfail\b|[Tt]imed out|Error|Problem|NOT|Failed(?! to generate persistent self-signed certificate)|Bad|bogus|lose|abort|Not |too big|exceeds|detected'
         self.copy_continue = r'Are you sure you want to continue connecting ((yes/no)|\((yes/no(/\[fingerprint\])?)?\))?'
         self.copy_other = r'^.*\[yes\/no\]\s*\?*\s*$'
         self.remote_param ='ftp:|tftp:|http:|rcp:|scp:'

@@ -11,7 +11,7 @@ PYPIREPO      = pypitest
 
 DEPENDENCIES = robotframework pyyaml dill coverage Sphinx \
 			   sphinxcontrib-napoleon sphinxcontrib-mockautodoc \
-			   sphinx-rtd-theme asyncssh PrettyTable
+			   sphinx-rtd-theme asyncssh PrettyTable "cryptography>=43.0"
 
 
 .PHONY: clean package distribute develop undevelop help devnet\
@@ -84,7 +84,7 @@ develop:
 	@echo ""
 	@pip uninstall -y $(PKG_NAME)
 	@pip install $(DEPENDENCIES)
-	@$(PYTHON) setup.py develop --no-deps
+	@pip install -e . --no-deps
 	@echo ""
 	@echo "Completed building and installing: $@"
 	@echo ""
@@ -97,7 +97,7 @@ undevelop:
 	@echo "Uninstalling $(PKG_NAME) development distributable: $@"
 	@echo ""
 
-	@$(PYTHON) setup.py develop --no-deps -q --uninstall
+	@pip uninstall $(PKG_NAME) -y
 
 	@echo ""
 	@echo "Completed uninstalling: $@"

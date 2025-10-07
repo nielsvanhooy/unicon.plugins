@@ -1,8 +1,8 @@
-c9k_login: 
+c9k_login:
   preface: |2
-    
+
     User Access Verification
-        
+
   prompt: "Username: "
   commands:
     "admin":
@@ -17,6 +17,7 @@ c9k_password:
 c9k_disable:
     prompt: "%N>"
     commands:
+      "show version | include operating mode": ""
       "enable":
         new_state: c9k_enable_password
 
@@ -38,6 +39,7 @@ c9k_enable:
         new_state: c9k_enable_quick_reload
       "reload":
         new_state: c9k_reload_proceed
+      "show version | include operating mode" : ""
       "show version" :
         response: |
           Cisco IOS XE Software, Version 16.09.02
@@ -85,14 +87,14 @@ c9k_enable:
           export@cisco.com.
 
 
-          Technology Package License Information: 
+          Technology Package License Information:
 
           ------------------------------------------------------------------------------
           Technology-package                                     Technology-package
-          Current                        Type                       Next reboot  
+          Current                        Type                       Next reboot
           ------------------------------------------------------------------------------
-          network-advantage       Smart License                    network-advantage   
-          dna-advantage           Subscription Smart License       dna-advantage                 
+          network-advantage       Smart License                    network-advantage
+          dna-advantage           Subscription Smart License       dna-advantage
 
 
           Smart Licensing Status: UNREGISTERED/EVAL EXPIRED
@@ -119,15 +121,15 @@ c9k_enable:
           System Serial Number               : FCW212345678
 
 
-          Switch Ports Model              SW Version        SW Image              Mode   
-          ------ ----- -----              ----------        ----------            ----   
+          Switch Ports Model              SW Version        SW Image              Mode
+          ------ ----- -----              ----------        ----------            ----
           *    1 50    C9500-40X          16.9.2            CAT9K_IOSXE           INSTALL
                2 50    C9500-40X          16.9.2            CAT9K_IOSXE           INSTALL
 
 
           Switch 02
           ---------
-          Switch uptime                      : 12 minutes 
+          Switch uptime                      : 12 minutes
 
           Base Ethernet MAC Address          : 00:3c:10:be:ee:ff
           Motherboard Assembly Number        : 73-18140-03
@@ -209,7 +211,8 @@ c9k_enable2:
   commands:
     "term length 0": ""
     "term width 0": ""
-    "show version": 
+    "show version | include operating mode" : ""
+    "show version":
       new_state: c9k_show_ver
 
 
@@ -260,14 +263,14 @@ c9k_show_ver:
       export@cisco.com.
 
 
-      Technology Package License Information: 
+      Technology Package License Information:
 
       ------------------------------------------------------------------------------
       Technology-package                                     Technology-package
-      Current                        Type                       Next reboot  
+      Current                        Type                       Next reboot
       ------------------------------------------------------------------------------
-      network-advantage   	Smart License                 	 network-advantage   
-      dna-advantage       	Subscription Smart License    	 dna-advantage                 
+      network-advantage   	Smart License                 	 network-advantage
+      dna-advantage       	Subscription Smart License    	 dna-advantage
       AIR License Level: AIR DNA Advantage
       Next reload AIR license Level: AIR DNA Advantage
 
@@ -297,15 +300,15 @@ c9k_show_ver:
       System Serial Number               : FCW2228A4DV
 
 
-      Switch Ports Model              SW Version        SW Image              Mode   
-      ------ ----- -----              ----------        ----------            ----   
+      Switch Ports Model              SW Version        SW Image              Mode
+      ------ ----- -----              ----------        ----------            ----
       *    1 50    C9500-40X          16.12.1           CAT9K_IOSXE           INSTALL
           2 50    C9500-40X          16.12.1           CAT9K_IOSXE           INSTALL
 
 
       Switch 02
       ---------
-      Switch uptime                      : 17 minutes 
+      Switch uptime                      : 17 minutes
 
       Base Ethernet MAC Address          : 00:3c:10:52:93:80
       Motherboard Assembly Number        : 73-18140-03
@@ -343,6 +346,7 @@ c9k_exec2:
   commands:
     "term length 0": ""
     "term width 0": ""
+    "show version | include operating mode" : ""
     "show version": |2
       Cisco IOS XE Software, Version 16.12.03a
       Cisco IOS Software [Gibraltar], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 16.12.3a, RELEASE SOFTWARE (fc1)
@@ -441,6 +445,7 @@ enable_c9k2:
     "redundancy force-switchover":
       new_state: switchover
     "term width 0": ""
+    "show version | include operating mode" : ""
     "show version": |2
       Cisco IOS XE Software, Version 16.12.03a
       Cisco IOS Software [Gibraltar], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 16.12.3a, RELEASE SOFTWARE (fc1)
@@ -534,14 +539,14 @@ enable_c9k2:
     "config term":
       new_state: config_c9k2
     "show redundancy sta |  in peer": |2
-           peer state = 8  -STANDBY HOT 
+           peer state = 8  -STANDBY HOT
     "show redundancy sta | inc Redundancy State": |2
       Redundancy State              = sso
     "sh redundancy stat | inc my state": |2
-             my state = 13 -ACTIVE 
+             my state = 13 -ACTIVE
     "sh redundancy state": |2
-             my state = 13 -ACTIVE 
-           peer state = 8  -STANDBY HOT 
+             my state = 13 -ACTIVE
+           peer state = 8  -STANDBY HOT
                  Mode = Duplex
                  Unit = Primary
               Unit ID = 48
@@ -605,6 +610,7 @@ switchover:
 
 # ========================
 c9k_login4:
+
   prompt: "Username: "
   commands:
     "cisco":
@@ -616,11 +622,40 @@ c9k_password4:
     "cisco":
       new_state: c9k_exec
 
+c9k_login5:
+  prompt: "Username: "
+  commands:
+    "admin":
+      new_state: c9k_password5
+
+c9k_login6:
+  prompt: "Username: "
+  commands:
+    "admin":
+      new_state: c9k_password6
+
+c9k_password6:
+  prompt: "Password: "
+  commands:
+    "cisco":
+      new_state: c9k_login4
+
+c9k_password5:
+  prompt: "Password: "
+  commands:
+    "cisco":
+      response: |
+        % Authentication failed
+      timing:
+        - 0:,0,3,0
+      new_state: c9k_login4
+
 c9k_exec:
   prompt: "%N>"
   commands:
     "term length 0": ""
     "term width 0": ""
+    "show version | include operating mode" : ""
     "show version": |2
           Cisco IOS XE Software, Version 16.09.02
           Cisco IOS Software [Fuji], Catalyst L3 Switch Software (c9k_IOSXE), Version 16.9.2, RELEASE SOFTWARE (fc4)
@@ -667,14 +702,14 @@ c9k_exec:
           export@cisco.com.
 
 
-          Technology Package License Information: 
+          Technology Package License Information:
 
           ------------------------------------------------------------------------------
           Technology-package                                     Technology-package
-          Current                        Type                       Next reboot  
+          Current                        Type                       Next reboot
           ------------------------------------------------------------------------------
-          network-advantage       Smart License                    network-advantage   
-          dna-advantage           Subscription Smart License       dna-advantage                 
+          network-advantage       Smart License                    network-advantage
+          dna-advantage           Subscription Smart License       dna-advantage
 
 
           Smart Licensing Status: UNREGISTERED/EVAL EXPIRED
@@ -701,15 +736,15 @@ c9k_exec:
           System Serial Number               : FCW212345678
 
 
-          Switch Ports Model              SW Version        SW Image              Mode   
-          ------ ----- -----              ----------        ----------            ----   
+          Switch Ports Model              SW Version        SW Image              Mode
+          ------ ----- -----              ----------        ----------            ----
           *    1 50    C9500-40X          16.9.2            c9k_IOSXE           INSTALL
                2 50    C9500-40X          16.9.2            c9k_IOSXE           INSTALL
 
 
           Switch 02
           ---------
-          Switch uptime                      : 12 minutes 
+          Switch uptime                      : 12 minutes
 
           Base Ethernet MAC Address          : 00:3c:10:be:ee:ff
           Motherboard Assembly Number        : 73-18140-03
@@ -727,9 +762,10 @@ c9k_exec:
 
 enable_c9k:
   prompt: "%N#"
-  commands:
+  commands: &enable_c9k_cmds
     "term length 0": ""
     "term width 0": ""
+    "show version | include operating mode" : ""
     "show version": |2
       Cisco IOS XE Software, Version 16.09.02
       Cisco IOS Software [Fuji], Catalyst L3 Switch Software (c9k_IOSXE), Version 16.9.2, RELEASE SOFTWARE (fc4)
@@ -776,14 +812,14 @@ enable_c9k:
       export@cisco.com.
 
 
-      Technology Package License Information: 
+      Technology Package License Information:
 
       ------------------------------------------------------------------------------
       Technology-package                                     Technology-package
-      Current                        Type                       Next reboot  
+      Current                        Type                       Next reboot
       ------------------------------------------------------------------------------
-      network-advantage       Smart License                    network-advantage   
-      dna-advantage           Subscription Smart License       dna-advantage                 
+      network-advantage       Smart License                    network-advantage
+      dna-advantage           Subscription Smart License       dna-advantage
 
 
       Smart Licensing Status: UNREGISTERED/EVAL EXPIRED
@@ -810,15 +846,15 @@ enable_c9k:
       System Serial Number               : FCW212345678
 
 
-      Switch Ports Model              SW Version        SW Image              Mode   
-      ------ ----- -----              ----------        ----------            ----   
+      Switch Ports Model              SW Version        SW Image              Mode
+      ------ ----- -----              ----------        ----------            ----
       *    1 50    C9500-40X          16.9.2            c9k_IOSXE           INSTALL
           2 50    C9500-40X          16.9.2            c9k_IOSXE           INSTALL
 
 
       Switch 02
       ---------
-      Switch uptime                      : 12 minutes 
+      Switch uptime                      : 12 minutes
 
       Base Ethernet MAC Address          : 00:3c:10:be:ee:ff
       Motherboard Assembly Number        : 73-18140-03
@@ -892,3 +928,147 @@ cat9k_install_add_commit:
     FAILED: install_add_activate_commit : Copy bootflash:asr1000rpx86-universalk9.BLD_V16
 
   new_state: cat9k_ha_active_enable
+
+enable_secret_password_state:
+  prompt: "%N#"
+  commands:
+    <<: *enable_c9k_cmds
+    "reload":
+      new_state: config_dialog
+
+config_dialog:
+  preface:
+    timing:
+      - 0:,0,0.01
+    response: |2
+
+
+             --- System Configuration Dialog ---
+
+  prompt: "\nWould you like to enter the initial configuration dialog? [yes/no]: "
+  commands:
+    "no": &enable_secret
+      new_state: enter_enable_config_secret
+      response: |2
+
+          The enable secret is a password used to protect
+          access to privileged EXEC and configuration modes.
+          This password, after entered, becomes encrypted in
+          the configuration.
+          -------------------------------------------------
+          secret should be of minimum 10 characters with
+          at least 1 upper case, 1 lower case, 1 digit and
+          should not contain [cisco]
+          -------------------------------------------------
+    "n": *enable_secret
+
+enter_enable_config_secret:
+  prompt: "  Enter enable secret: "
+  commands:
+    "": "Please enter a secret"
+    "veryverybadpw":
+      response: "%Password validation failed"
+    "Secret12345":
+      new_state: confirm_enable_config_secret
+
+confirm_enable_config_secret:
+  prompt: "  Confirm enable secret: "
+  commands:
+    "Secret12345":
+      new_state: enter_enable_secret_selection
+      response: |2
+
+        The following configuration command script was created:
+
+        enable secret 9 $9$gCGcm2IWBJOT5U$p6jqb1plxOJpr3yYwa/3fUSfpQjM.RgfcunyUXhqfRA
+        !
+        end
+
+
+        [0] Go to the IOS command prompt without saving this config.
+        [1] Return back to the setup without saving this config.
+        [2] Save this configuration to nvram and exit.
+
+enter_enable_secret_selection:
+  prompt: "Enter your selection [2]: "
+  commands:
+    "2":
+      new_state: enter_encryption_config_selection
+      response: |
+        Building configuration...
+
+        [OK]
+        Use the enabled mode 'configure' command to modify this configuration.
+
+        -----System Security Configuration Dialog-----
+
+
+        Cisco recommends that for enchanced security users should encrypt sensitive info
+        The configuration dialog will allow you to set encryption level
+        It is recommended that both type-6 & type-7 encryption should be enabled by user
+        For type-6 user will need to create and remember Master key as it cannot be recovered
+
+
+        [0] for both type-6 & type-7 encryption to be applied on the box
+        [1] for only type-7 encryption to be applied on the box
+        [2] for no encryption to be applied on the box
+
+enter_encryption_config_selection:
+  prompt: "Enter your encryption selection [2]: "
+  commands:
+    "2":
+      new_state: press_return
+      response: |
+        you have chosen to operate device without any encryption enabled on the box
+
+        The following configuration command script was created:
+        !
+        end
+
+
+        [0] Go to the IOS command prompt without saving this config.
+        [1] Return back to the setup without saving this config.
+        [2] Save this configuration to nvram and exit.
+
+grub_connect:
+  preface: |
+
+    Connected to 10.85.124.57.
+
+
+    Escape character is '^]'.
+  prompt: ""
+  commands:
+    "":
+      new_state: grub_execute
+
+grub_execute:
+  prompt: "grub>                                                                          \x1b[8;7Hc\x1b[8;8Hc\x1b[8;9H"
+  preface: |
+  
+    GNU GRUB  version 0.97  (638K lower / 3143552K upper memory)
+
+
+    [4;2H+-------------------------------------------------------------------------+[5;2H|[5;76H|[6;2H|[6;76H|[7;2H|[7;76H|[8;2H|[8;76H|[9;2H|[9;76H|[10;2H|[10;76H|[11;2H|[11;76H|[12;2H|[12;76H|[13;2H|[13;76H|[14;2H|[14;76H|[15;2H|[15;76H|[16;2H|[16;76H|[17;2H+-------------------------------------------------------------------------+
+
+          Use the ^ and v keys to select which entry is highlighted.
+
+          Press enter to boot the selected OS, or 'c' for a command-line.[5;78H [7m[5;3H vWLC - /C9800-CL-universalk9.2024-09-18_15.34_barkeep.SSA_925807.bin    [5;75H[6;3H vWLC - packages.conf                                                    [6;75H[7;3H vWLC - GOLDEN IMAGE                                                     [7;75H[8;3H                                                                         [8;75H[9;3H                                                                         [9;75H[10;3H                                                                         [10;75H[11;3H                                                                         [11;75H[12;3H                                                                         [12;75H[13;3H                                                                         [13;75H[14;3H                                                                         [14;75H[15;3H                                                                         [15;75H[16;3H                                                                         [16;75H[16;78H [5;75H[23;4HThe highlighted entry will be booted automatically in 5 seconds.    [5;75H[23;4HThe highlighted entry will be booted automatically in 4 seconds.    [5;75H6: 2024-10-15T12:01:40:  Found the grub_activity_pattern! Breaking the boot process by sending 'c'
+    [23;4H8: 2024-10-15T12:01:40:  Found the grub_activity_pattern! Breaking the boot process by sending 'c'
+                                                                        [5;75H[H[J
+
+        GNU GRUB  version 0.97  (638K lower / 3143552K upper memory)
+
+
+    [ Minimal BASH-like line editing is supported.  For the first word, TAB
+
+      lists possible command completions.  Anywhere else TAB lists the possible
+
+      completions of a device/filename.  ESC at any time exits to menu. ]
+  commands:
+    "set": |
+      BOOT=bootflash:/cat9k_iosxe.17.06.01.SPA.bin;
+      BOOT_LOADER_UPGRADE_DISABLE=1
+      MANUAL_BOOT=yes
+    "boot":
+      new_state: cat9k_rommon_boot

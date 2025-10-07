@@ -23,3 +23,5 @@ class StackIosXEReloadPatterns(ReloadPatterns):
     def __init__(self):
         super().__init__()
         self.reload_entire_shelf = r'^.*?Reload the entire shelf \[confirm\]'
+        self.reload_fast = r'^.*Proceed with reload fast\? \[confirm\]'
+        self.accelarating_discovery = r'^.*All switches in the stack have been discovered. Accelerating discovery'
