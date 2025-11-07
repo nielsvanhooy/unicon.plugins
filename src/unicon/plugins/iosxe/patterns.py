@@ -47,6 +47,7 @@ class IosXEPatterns(GenericPatterns):
         self.acm_prompt = r'^(.*?)\(acm.*?\)#[\s\x07]*$'
         self.syntax_prompt = r'^(.*?)\(syntax.*?\)#[\s\x07]*$'
         self.rules_prompt = r'^(.*?)\(rules.*?\)#[\s\x07]*$'
+        self.accept_uela = r'^.*ACCEPT\? \(yes\/\[no]\):\s*$'
 
 
 class IosXEReloadPatterns(ReloadPatterns):

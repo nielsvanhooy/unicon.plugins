@@ -69,6 +69,11 @@ proceed_confirm_stmt = Statement(pattern=patterns.proceed_confirm,
                                  loop_continue=True,
                                  continue_timer=False)
 
+accept_eula_stmt = Statement(pattern=patterns.accept_uela,
+                             action='sendline(yes)',
+                             loop_continue=True,
+                             continue_timer=False)
+
 macro_prompt = Statement(pattern=patterns.macro_prompt,
                          loop_continue=False)
 
@@ -85,6 +90,7 @@ configure_statement_list = [
     want_continue,
     are_you_sure_ywtdt,
     proceed_confirm_stmt,
+    accept_eula_stmt,
     macro_prompt
 ]
 
