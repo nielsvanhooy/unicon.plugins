@@ -74,6 +74,14 @@ accept_eula_stmt = Statement(pattern=patterns.accept_uela,
                              loop_continue=True,
                              continue_timer=False)
 
+reload_eula_prompt_stmt = Statement(pattern=patterns.uela_reload_prompt,
+                             action='sendline(yes)',
+                             loop_continue=True,
+                             continue_timer=False)
+
+
+
+
 macro_prompt = Statement(pattern=patterns.macro_prompt,
                          loop_continue=False)
 
@@ -91,7 +99,8 @@ configure_statement_list = [
     are_you_sure_ywtdt,
     proceed_confirm_stmt,
     accept_eula_stmt,
-    macro_prompt
+    macro_prompt,
+    reload_eula_prompt_stmt
 ]
 
 execute_statement_list = [
@@ -102,6 +111,7 @@ execute_statement_list = [
     want_continue,
     do_you_want_to,
     accept_eula_stmt,
+    reload_eula_prompt_stmt
 ]
 
 #############################################################################

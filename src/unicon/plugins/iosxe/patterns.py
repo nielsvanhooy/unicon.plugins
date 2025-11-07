@@ -48,6 +48,7 @@ class IosXEPatterns(GenericPatterns):
         self.syntax_prompt = r'^(.*?)\(syntax.*?\)#[\s\x07]*$'
         self.rules_prompt = r'^(.*?)\(rules.*?\)#[\s\x07]*$'
         self.accept_uela = r'^.*ACCEPT.*$'
+        self.uela_reload_prompt = r"^.*Continue to reload\?.*s*$"
 
 
 class IosXEReloadPatterns(ReloadPatterns):
