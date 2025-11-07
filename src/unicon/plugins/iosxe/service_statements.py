@@ -100,7 +100,8 @@ execute_statement_list = [
     delete_filename,
     confirm,
     want_continue,
-    do_you_want_to
+    do_you_want_to,
+    accept_eula_stmt,
 ]
 
 #############################################################################
